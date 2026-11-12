@@ -188,6 +188,12 @@ select {
   color: #ffffff;
 }
 
+.canvas-tool-icon:disabled {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
+}
+
 .retouch-header-center {
   display: flex;
   align-items: center;
@@ -814,7 +820,8 @@ select {
   overflow: hidden;
 }
 
-.library-card-media img {
+.library-card-media img,
+.library-card-media canvas {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -869,14 +876,22 @@ select {
   padding: 12px 16px;
 }
 
+.retouch-viewport.hand-pan-ready,
+.retouch-viewport.hand-pan-ready * {
+  cursor: grab !important;
+}
+
+.retouch-viewport.hand-pan-dragging,
+.retouch-viewport.hand-pan-dragging * {
+  cursor: grabbing !important;
+}
+
 .retouch-canvas-wrap {
   position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  max-width: 100%;
-  max-height: 100%;
+  display: block;
+  flex-shrink: 0;
   overflow: hidden;
+  transform-origin: center center;
   box-shadow: 0 10px 36px rgba(0, 0, 0, 0.85);
 }
 
@@ -891,31 +906,33 @@ select {
   background-position: 0 0, 0 8px, 8px -8px, -8px 0;
 }
 
-#after-canvas {
-  /* JS sets style.width/height to exact CSS display size (DPR-aware).
-     Do NOT set max-width/max-height here — that would trigger CSS scaling
-     which blurs the canvas. The canvas buffer is already the right physical size. */
+#after-canvas,
+#before-canvas,
+#overlay-canvas {
+  /* Lock all 3 canvases to the exact same box inside #canvas-wrapper (cssW × cssH set by JS)
+     so Before/After split & Hold-Before compare never shift, stretch, or clip unevenly. */
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   display: block;
-  image-rendering: -webkit-optimize-contrast; /* Safari */
-  image-rendering: crisp-edges;              /* Firefox */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
+
+#after-canvas {
+  pointer-events: none;
+  z-index: 1;
 }
 
 #before-canvas {
-  position: absolute;
-  top: 0;
-  left: 0;
-  /* width/height set by JS to match after-canvas (cssW × cssH) */
   pointer-events: none;
-  display: block;
+  z-index: 2;
 }
 
 #overlay-canvas {
-  position: absolute;
-  top: 0;
-  left: 0;
-  /* width/height set by JS to match after-canvas (cssW × cssH) */
   pointer-events: auto;
-  display: block;
+  z-index: 5;
 }
 
 .retouch-split-line {
@@ -923,6 +940,7 @@ select {
   top: 0;
   bottom: 0;
   left: 50%;
+  transform: translateX(-50%);
   width: 2px;
   background: rgba(255, 255, 255, 0.88);
   cursor: ew-resize;
@@ -1236,7 +1254,8 @@ select {
   border-color: var(--evoto-gold);
 }
 
-.film-thumb img {
+.film-thumb img,
+.film-thumb canvas {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -3129,106 +3148,216 @@ select {
 
 /* LiYing AI Card */
 .liying-bg-card {
-  padding: 10px 11px;
-  border-radius: 9px;
-  background: linear-gradient(145deg, #181920, #131418);
-  border: 1px solid #2a2d38;
+  padding: 11px;
+  border-radius: 10px;
+  background:
+    radial-gradient(120% 80% at 0% 0%, rgba(41, 109, 246, 0.11), transparent 55%),
+    linear-gradient(160deg, #1b1d25 0%, #13151b 100%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-  margin-bottom: 4px;
+  gap: 9px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 6px 18px rgba(0, 0, 0, 0.36);
+  margin-bottom: 6px;
 }
 
 .liying-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 8px;
 }
 
 .liying-badge-title {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11.5px;
-  color: #e4e4e7;
+  gap: 7px;
+  min-width: 0;
 }
 
 .liying-sparkle {
-  font-size: 13px;
-  color: #60a5fa;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.24), rgba(248, 212, 66, 0.16));
+  border: 1px solid rgba(96, 165, 250, 0.34);
+  color: #93c5fd;
+  flex-shrink: 0;
+}
+
+.liying-title-stack {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.liying-title-stack strong {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-primary);
+  letter-spacing: 0.1px;
+}
+
+.liying-subtitle {
+  font-size: 10px;
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .liying-tag {
   font-size: 9px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: rgba(59, 130, 246, 0.16);
-  color: #60a5fa;
+  letter-spacing: 0.55px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(41, 109, 246, 0.15);
+  color: #7db0ff;
   border: 1px solid rgba(59, 130, 246, 0.32);
+  flex-shrink: 0;
 }
 
 .liying-checkbox-label {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 10.5px;
-  color: #a1a1aa;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 9px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 11px;
+  color: var(--text-primary);
   cursor: pointer;
   user-select: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.liying-checkbox-label:hover {
+  background: rgba(255, 255, 255, 0.055);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.liying-option-text {
+  color: #d4d8e1;
+  font-weight: 500;
 }
 
 .liying-checkbox-label input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 30px;
+  height: 16px;
+  margin: 0;
+  border-radius: 999px;
+  background: #313542;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   cursor: pointer;
-  accent-color: #3b82f6;
+  flex-shrink: 0;
+  transition: background 0.16s ease, border-color 0.16s ease;
+}
+
+.liying-checkbox-label input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  transition: transform 0.16s ease;
+}
+
+.liying-checkbox-label input[type="checkbox"]:checked {
+  background: var(--evoto-blue);
+  border-color: #60a5fa;
+}
+
+.liying-checkbox-label input[type="checkbox"]:checked::after {
+  transform: translateX(14px);
 }
 
 .liying-preset-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 5px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
 }
 
 .liying-color-chip {
-  display: inline-flex;
+  display: flex;
+  flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 5px;
-  padding: 4px 6px;
-  border-radius: 6px;
-  background: #20222a;
-  border: 1px solid #2e323e;
-  color: #d4d4d8;
-  font-size: 10.5px;
+  min-width: 0;
+  padding: 7px 3px 6px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  color: var(--text-secondary);
+  font-size: 10px;
   font-weight: 500;
+  line-height: 1.15;
+  text-align: center;
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: all 0.14s ease;
+}
+
+.liying-color-chip span:last-child {
+  width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .liying-color-chip:hover {
-  background: #272a34;
-  border-color: #454958;
+  background: rgba(255, 255, 255, 0.075);
+  border-color: rgba(255, 255, 255, 0.2);
   color: #ffffff;
+  transform: translateY(-1px);
 }
 
 .liying-color-chip.active {
-  background: #1e293b;
-  border-color: #3b82f6;
-  color: #60a5fa;
-  box-shadow: 0 0 0 1px #3b82f6 inset;
+  background: rgba(41, 109, 246, 0.16);
+  border-color: #4f8dff;
+  color: #eef4ff;
+  font-weight: 600;
+  box-shadow:
+    0 0 0 1px rgba(79, 141, 255, 0.45) inset,
+    0 4px 12px rgba(41, 109, 246, 0.22);
 }
 
 .chip-dot {
-  width: 9px;
-  height: 9px;
+  width: 19px;
+  height: 19px;
   border-radius: 50%;
   flex-shrink: 0;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.22),
+    0 2px 5px rgba(0, 0, 0, 0.4);
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
+}
+
+.chip-dot-light {
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.22),
+    0 2px 5px rgba(0, 0, 0, 0.35);
+}
+
+.liying-color-chip.active .chip-dot {
+  transform: scale(1.08);
+  box-shadow:
+    0 0 0 2px #161821,
+    0 0 0 3.5px #60a5fa;
 }
 
 .chip-transparent {
@@ -3238,38 +3367,43 @@ select {
     linear-gradient(-45deg, #71717a 25%, transparent 25%),
     linear-gradient(45deg, transparent 75%, #71717a 75%),
     linear-gradient(-45deg, transparent 75%, #71717a 75%);
-  background-size: 4px 4px;
-  background-position: 0 0, 0 2px, 2px -2px, -2px 0;
-  border: 1px solid #71717a;
+  background-size: 6px 6px;
+  background-position: 0 0, 0 3px, 3px -3px, -3px 0;
 }
 
 .liying-actions-row {
   display: flex;
   gap: 6px;
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 .btn-liying-primary {
   flex: 1;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: linear-gradient(135deg, #2563eb, #1d4ed8);
-  border: 1px solid #3b82f6;
+  padding: 7px 10px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, #296df6 0%, #1d4ed8 100%);
+  border: 1px solid rgba(96, 165, 250, 0.65);
   color: #ffffff;
   font-size: 11px;
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
   transition: all 0.14s ease;
-  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 3px 10px rgba(37, 99, 235, 0.36);
 }
 
 .btn-liying-primary:hover {
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
-  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.5);
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.26),
+    0 4px 14px rgba(37, 99, 235, 0.5);
   transform: translateY(-0.5px);
 }
 
@@ -3281,20 +3415,22 @@ select {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 9px;
-  border-radius: 6px;
-  background: #20222a;
-  border: 1px solid #323644;
-  color: #cbd5e1;
-  font-size: 10.5px;
+  gap: 5px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  color: #d4d8e1;
+  font-size: 11px;
   font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
   transition: all 0.12s ease;
 }
 
 .btn-liying-secondary:hover {
-  background: #272a34;
-  border-color: #4b5266;
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.24);
   color: #ffffff;
 }
 

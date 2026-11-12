@@ -147,7 +147,6 @@ export function createDefaultParams() {
     vignetteMidpoint: 50, vignetteRoundness: 0, vignetteFeather: 50, vignetteHighlights: 0,
     opticsDistortion: 0, opticsVignetting: 0, opticsVignettingMidpoint: 50,
     opticsCaRed: 0, opticsCaBlue: 0, opticsDefringePurple: 0, opticsDefringeGreen: 0,
-    geoScale: 100, geoOffsetX: 0, geoOffsetY: 0, flipVertical: false,
 
     // MODULE 3 & 3B: BACKGROUND & CLOTHING
     clothingTarget: 'all',
@@ -438,10 +437,13 @@ const state = {
   spotHealMode: false,
   showFaceGuides: false,
   zoomScale: 1.0,
+  panX: 0,
+  panY: 0,
   realtimeColor: true,
   workspaceMode: 'develop', // 'develop' | 'grid'
   activeModule: 'mod-portrait',
   cropPreviewMode: false,
+  isRestoringHistory: false,
   bgCategory: 'image', // 'image' | 'solid'
   bgLibTab: 'rec', // 'rec' | 'user'
   bgFilter: 'explore', // 'explore' | 'selected'
@@ -460,6 +462,8 @@ const state = {
   draggingCurveIdx: -1,
   draggingCrop: null,
   draggingRotateAngle: false,
+  spacePressed: false,
+  draggingPan: null,
 };
 
 const afterCanvas = document.getElementById('after-canvas');
@@ -512,10 +516,31 @@ function formatSliderBadgeValue(val, key = '') {
   return Number.isInteger(num) ? String(num) : num.toFixed(1);
 }
 
+function clampZoomPan() {
+  if (state.zoomScale < 1) {
+    state.panX = 0;
+    state.panY = 0;
+    return;
+  }
+  const vp = document.getElementById('canvas-viewport');
+  const cw = canvasWrap;
+  if (!vp || !cw) return;
+  const scaledW = (cw.offsetWidth || 400) * state.zoomScale;
+  const scaledH = (cw.offsetHeight || 400) * state.zoomScale;
+  const maxX = Math.max(vp.clientWidth * 0.35, (scaledW - vp.clientWidth) * 0.5 + 80);
+  const maxY = Math.max(vp.clientHeight * 0.35, (scaledH - vp.clientHeight) * 0.5 + 80);
+  state.panX = Math.max(-maxX, Math.min(maxX, state.panX));
+  state.panY = Math.max(-maxY, Math.min(maxY, state.panY));
+}
+
+let _lastZoomScheduleScale = 1;
+let _zoomRefineTimer = null;
+
 function updateZoomUI() {
-  // Zoom via CSS transform on the wrap so all canvas layers scale together in sync.
+  clampZoomPan();
+  // Zoom + cursor-anchored pan via CSS transform so all canvas layers stay synced.
   if (canvasWrap) {
-    canvasWrap.style.transform = `scale(${state.zoomScale})`;
+    canvasWrap.style.transform = `translate(${state.panX.toFixed(1)}px, ${state.panY.toFixed(1)}px) scale(${state.zoomScale})`;
   }
   if (zoomReadout) {
     zoomReadout.textContent =
@@ -527,6 +552,212 @@ function updateZoomUI() {
   const btn100 = document.getElementById('btn-zoom-100');
   btnFit?.classList.toggle('active', Math.abs(state.zoomScale - 1) < 0.02);
   btn100?.classList.toggle('active', Math.abs(state.zoomScale - 2) < 0.05);
+
+  if (Math.abs(state.zoomScale - _lastZoomScheduleScale) > 0.08) {
+    _lastZoomScheduleScale = state.zoomScale;
+    clearTimeout(_zoomRefineTimer);
+    _zoomRefineTimer = setTimeout(() => {
+      const photo = getActivePhoto();
+      if (!photo) return;
+      renderViewport();
+      if (
+        state.zoomScale >= 1.35 &&
+        hasTauriRuntime() &&
+        !photo._processedHQ &&
+        !photo._isLiyingOutput &&
+        isPhotoEdited(photo.params)
+      ) {
+        processActivePhoto(true);
+      }
+    }, 90);
+  }
+}
+
+// =========================================================================
+// PER-PHOTO UNDO / REDO HISTORY ENGINE (Ctrl+Z / Ctrl+Shift+Z)
+// =========================================================================
+const MAX_HISTORY_STEPS = 40;
+const CROP_FRAME_PARAM_KEYS = new Set([
+  'cropX',
+  'cropY',
+  'cropW',
+  'cropH',
+  'cropPreset',
+  'cropAspectW',
+  'cropAspectH',
+  'cropCustomW',
+  'cropCustomH',
+  'cropDimUnit',
+  'cropDpi',
+  'cropShowGrid',
+  'cropAiSubject',
+  'cropAlignVertical',
+  'cropAlignEye',
+]);
+
+function nonCropParamsFingerprint(params) {
+  const out = {};
+  for (const k of Object.keys(params || {})) {
+    if (!CROP_FRAME_PARAM_KEYS.has(k)) out[k] = params[k];
+  }
+  return JSON.stringify(out);
+}
+
+function capturePhotoSnapshot(photo) {
+  if (!photo) return null;
+  const paramsCopy = JSON.parse(JSON.stringify(photo.params));
+  const curveCopy = photo.curvePoints ? JSON.parse(JSON.stringify(photo.curvePoints)) : null;
+  const sig = JSON.stringify({
+    p: paramsCopy,
+    c: curveCopy,
+    cp: Boolean(state.cropPreviewMode),
+    w: photo.width,
+    h: photo.height,
+    o: photo.originalDataUrl,
+    ly: Boolean(photo._isLiyingOutput),
+  });
+  return {
+    params: paramsCopy,
+    curvePoints: curveCopy,
+    cropPreviewMode: Boolean(state.cropPreviewMode),
+    originalDataUrl: photo.originalDataUrl,
+    processedDataUrl: photo.processedDataUrl,
+    width: photo.width,
+    height: photo.height,
+    mesh478: photo.mesh478 || null,
+    maskBase64: photo.maskBase64 || null,
+    sceneMaskBase64: photo.sceneMaskBase64 || null,
+    highresMatteBase64: photo.highresMatteBase64 || null,
+    _matteSourceRef: photo._matteSourceRef || null,
+    landmarksDetected: Boolean(photo.landmarksDetected),
+    isLiyingOutput: Boolean(photo._isLiyingOutput),
+    _sig: sig,
+  };
+}
+
+function updateHistoryButtonsUI(photo = getActivePhoto()) {
+  const undoBtn = document.getElementById('btn-undo');
+  const redoBtn = document.getElementById('btn-redo');
+  if (!undoBtn && !redoBtn) return;
+  const hist = photo ? ensurePhotoHistory(photo) : null;
+  if (undoBtn) undoBtn.disabled = !hist || hist.undoStack.length === 0;
+  if (redoBtn) redoBtn.disabled = !hist || hist.redoStack.length === 0;
+}
+
+function initPhotoHistory(photo) {
+  if (!photo) return;
+  photo.history = {
+    undoStack: [],
+    redoStack: [],
+    current: capturePhotoSnapshot(photo),
+  };
+  if (photo === getActivePhoto()) updateHistoryButtonsUI(photo);
+}
+
+function ensurePhotoHistory(photo) {
+  if (!photo) return null;
+  if (!photo.history || !photo.history.current) {
+    initPhotoHistory(photo);
+  }
+  return photo.history;
+}
+
+function commitHistory(photo = getActivePhoto()) {
+  if (!photo || state.isRestoringHistory) return;
+  const hist = ensurePhotoHistory(photo);
+  const next = capturePhotoSnapshot(photo);
+  if (!next || next._sig === hist.current?._sig) return;
+  hist.undoStack.push(hist.current);
+  if (hist.undoStack.length > MAX_HISTORY_STEPS) {
+    hist.undoStack.shift();
+  }
+  hist.current = next;
+  hist.redoStack = [];
+  if (photo === getActivePhoto()) updateHistoryButtonsUI(photo);
+}
+
+async function applyHistorySnapshot(photo, targetSnap, prevSnap) {
+  if (!photo || !targetSnap) return;
+  const nonCropChanged =
+    !prevSnap ||
+    targetSnap.originalDataUrl !== prevSnap.originalDataUrl ||
+    nonCropParamsFingerprint(targetSnap.params) !== nonCropParamsFingerprint(prevSnap.params) ||
+    JSON.stringify(targetSnap.curvePoints) !== JSON.stringify(prevSnap.curvePoints);
+
+  state.isRestoringHistory = true;
+  try {
+    photo.params = JSON.parse(JSON.stringify(targetSnap.params));
+    photo.curvePoints = targetSnap.curvePoints
+      ? JSON.parse(JSON.stringify(targetSnap.curvePoints))
+      : null;
+    state.cropPreviewMode = Boolean(targetSnap.cropPreviewMode);
+    photo.originalDataUrl = targetSnap.originalDataUrl;
+    photo.width = targetSnap.width;
+    photo.height = targetSnap.height;
+    photo.mesh478 = targetSnap.mesh478 || null;
+    photo.maskBase64 = targetSnap.maskBase64 || null;
+    photo.sceneMaskBase64 = targetSnap.sceneMaskBase64 || null;
+    photo.highresMatteBase64 = targetSnap.highresMatteBase64 || null;
+    photo._matteSourceRef = targetSnap._matteSourceRef || null;
+    photo.landmarksDetected = Boolean(targetSnap.landmarksDetected);
+    photo._isLiyingOutput = Boolean(targetSnap.isLiyingOutput);
+    photo._subjectBoundsCache = null;
+
+    document.querySelectorAll('.retouch-preset-item').forEach((c) => c.classList.remove('active'));
+    syncSlidersFromParams();
+
+    if (targetSnap.isLiyingOutput || !nonCropChanged) {
+      if (targetSnap.isLiyingOutput && targetSnap.processedDataUrl) {
+        photo.processedDataUrl = targetSnap.processedDataUrl;
+      }
+      await renderViewport();
+      renderFilmstrip();
+      if (state.workspaceMode === 'grid') renderLibraryGrid();
+    } else {
+      await processActivePhoto(false);
+    }
+  } finally {
+    state.isRestoringHistory = false;
+  }
+}
+
+async function undoActivePhoto() {
+  const photo = getActivePhoto();
+  if (!photo) return;
+  const hist = ensurePhotoHistory(photo);
+  const liveSnap = capturePhotoSnapshot(photo);
+  if (liveSnap && hist.current && liveSnap._sig !== hist.current._sig) {
+    hist.undoStack.push(hist.current);
+    hist.current = liveSnap;
+  }
+  if (hist.undoStack.length === 0) {
+    renderTimeLabel.textContent = 'Không còn thao tác để hoàn tác';
+    return;
+  }
+  const prevSnap = hist.current;
+  const targetSnap = hist.undoStack.pop();
+  hist.redoStack.push(prevSnap);
+  hist.current = targetSnap;
+  await applyHistorySnapshot(photo, targetSnap, prevSnap);
+  updateHistoryButtonsUI(photo);
+  renderTimeLabel.textContent = `Đã hoàn tác (${hist.undoStack.length} bước trước) ✓`;
+}
+
+async function redoActivePhoto() {
+  const photo = getActivePhoto();
+  if (!photo) return;
+  const hist = ensurePhotoHistory(photo);
+  if (hist.redoStack.length === 0) {
+    renderTimeLabel.textContent = 'Không còn thao tác để làm lại';
+    return;
+  }
+  const prevSnap = hist.current;
+  const targetSnap = hist.redoStack.pop();
+  hist.undoStack.push(prevSnap);
+  hist.current = targetSnap;
+  await applyHistorySnapshot(photo, targetSnap, prevSnap);
+  updateHistoryButtonsUI(photo);
+  renderTimeLabel.textContent = `Đã làm lại (${hist.redoStack.length} bước sau) ✓`;
 }
 
 // =========================================================================
@@ -955,6 +1186,7 @@ async function applyCropAlignAI(photo, mode) {
   } else {
     await renderViewport();
   }
+  commitHistory(photo);
 }
 
 function updateCropControlsUI(photo) {
@@ -1089,14 +1321,18 @@ function updateCropControlsUI(photo) {
   }
 }
 
+let _renderViewportSeq = 0;
+
 async function renderViewport() {
   const photo = getActivePhoto();
   if (!photo) return;
 
+  const seq = ++_renderViewportSeq;
   const [beforeImg, afterImg] = await Promise.all([
     loadImageElement(photo.originalDataUrl),
     loadImageElement(photo.processedDataUrl || photo.originalDataUrl),
   ]);
+  if (seq !== _renderViewportSeq) return;
 
   const bw = beforeImg.naturalWidth || photo.width;
   const bh = beforeImg.naturalHeight || photo.height;
@@ -1120,26 +1356,43 @@ async function renderViewport() {
   const ash = showCropped ? Math.max(1, Math.min(ah - asy, p.cropH * ah)) : ah;
 
   // --- DPR-aware canvas sizing (zoom handled separately via CSS transform on canvasWrap) ---
-  // Compute the display size the CSS will give the canvas at zoom=1 (fit-contain inside viewport).
+  // Measure exact content box of #canvas-viewport so wrapper & all 3 canvases share one exact size.
   const dpr = Math.min(window.devicePixelRatio || 1, 3); // cap at 3× to avoid OOM
   const viewport = document.getElementById('canvas-viewport');
-  const maxCssW = Math.max(64, viewport ? viewport.clientWidth - 32 : window.innerWidth - 32);
-  const maxCssH = Math.max(64, viewport ? viewport.clientHeight - 32 : window.innerHeight - 220);
+  const vpStyle = viewport ? getComputedStyle(viewport) : null;
+  const padX = vpStyle ? (parseFloat(vpStyle.paddingLeft) || 0) + (parseFloat(vpStyle.paddingRight) || 0) : 32;
+  const padY = vpStyle ? (parseFloat(vpStyle.paddingTop) || 0) + (parseFloat(vpStyle.paddingBottom) || 0) : 24;
+  const rawVpW = viewport ? viewport.clientWidth - padX : window.innerWidth - 32;
+  const rawVpH = viewport ? viewport.clientHeight - padY : window.innerHeight - 220;
+  const maxCssW = Math.max(64, Math.floor(rawVpW > 0 ? rawVpW : window.innerWidth - 32));
+  const maxCssH = Math.max(64, Math.floor(rawVpH > 0 ? rawVpH : window.innerHeight - 220));
   const fitScale = Math.min(1, maxCssW / imgW, maxCssH / imgH);
   const cssW = Math.max(1, Math.round(imgW * fitScale));
   const cssH = Math.max(1, Math.round(imgH * fitScale));
-  // Physical pixels = CSS pixels × DPR → sharp on HiDPI screens
-  const w = Math.round(cssW * dpr);
-  const h = Math.round(cssH * dpr);
+  // Physical pixels = CSS pixels × DPR × zoom boost (capped to source & 3600px) → crisp when zoomed in
+  const zoomBoost = state.zoomScale > 1.05 ? Math.min(state.zoomScale, 3.5) : 1;
+  const targetW = Math.round(cssW * dpr * zoomBoost);
+  const targetH = Math.round(cssH * dpr * zoomBoost);
+  const maxBacking = Math.min(3600, Math.max(imgW, aw, bw));
+  const capScale = Math.min(1, maxBacking / Math.max(targetW, targetH, 1));
+  const w = Math.max(Math.round(cssW * dpr), Math.round(targetW * capScale));
+  const h = Math.max(Math.round(cssH * dpr), Math.round(targetH * capScale));
 
   afterCanvas.width  = w;  afterCanvas.height  = h;
   beforeCanvas.width = w;  beforeCanvas.height = h;
   overlayCanvas.width = w; overlayCanvas.height = h;
 
-  // Set CSS display size so browser does NOT scale the canvas (1 canvas px = 1 CSS px / DPR)
-  afterCanvas.style.width   = `${cssW}px`;  afterCanvas.style.height   = `${cssH}px`;
-  beforeCanvas.style.width  = `${cssW}px`;  beforeCanvas.style.height  = `${cssH}px`;
-  overlayCanvas.style.width = `${cssW}px`;  overlayCanvas.style.height = `${cssH}px`;
+  // Lock #canvas-wrapper to exact cssW × cssH; canvases fill 100% via CSS position:absolute; inset:0
+  if (canvasWrap) {
+    canvasWrap.style.width = `${cssW}px`;
+    canvasWrap.style.height = `${cssH}px`;
+  }
+  afterCanvas.style.width = '';
+  afterCanvas.style.height = '';
+  beforeCanvas.style.width = '';
+  beforeCanvas.style.height = '';
+  overlayCanvas.style.width = '';
+  overlayCanvas.style.height = '';
 
   canvasWrap?.classList.toggle(
     'has-transparency',
@@ -1170,7 +1423,7 @@ async function renderViewport() {
     beforeCtx.restore();
 
     splitLine.classList.remove('hidden');
-    splitLine.style.left = `${state.splitRatio * 100}%`;
+    splitLine.style.left = `${(splitX / w) * 100}%`;
   } else {
     splitLine.classList.add('hidden');
   }
@@ -1552,6 +1805,7 @@ function renderBgUserGallery(params) {
           photo.params.bgReplaceMode = 'original';
         }
         updateBgCustomControlsUI(photo.params);
+        commitHistory(photo);
         processActivePhoto(false);
       } else {
         renderBgUserGallery(photo?.params || params);
@@ -1568,6 +1822,7 @@ function renderBgUserGallery(params) {
       photo.params.bgCustomImage = item.dataUrl;
       photo.params.bgReplaceMode = 'custom_image';
       updateBgCustomControlsUI(photo.params);
+      commitHistory(photo);
       processActivePhoto(false);
     });
 
@@ -2091,6 +2346,25 @@ async function renderWebBgPreviewDataUrl(photo) {
 async function processActivePhoto(highQuality = false) {
   const photo = getActivePhoto();
   if (!photo) return;
+  if (!state.isRestoringHistory) {
+    photo._isLiyingOutput = false;
+  }
+
+  // If no retouch/color/crop/spot edits are active, keep original full-resolution master directly
+  // so newly imported or reset photos stay 100% as crisp as the source without preview re-compression.
+  if (!isPhotoEdited(photo.params) && !photo._isLiyingOutput) {
+    photo.processedDataUrl = photo.originalDataUrl;
+    photo._processedHQ = true;
+    const aiBadge = photo.landmarksDetected ? 'AI 478 điểm ✓' : 'Ảnh gốc 100% ✓';
+    renderTimeLabel.textContent = `${aiBadge} • Gốc`;
+    await renderViewport();
+    renderFilmstrip();
+    if (state.workspaceMode === 'grid') renderLibraryGrid();
+    if (hasTauriRuntime() && !needsHighresMatte(photo.params) && !photo._matteAttempted) {
+      prewarmActiveHighresMatte();
+    }
+    return;
+  }
 
   if (!hasTauriRuntime()) {
     const seq = ++webPreviewSeq;
@@ -2122,14 +2396,16 @@ async function processActivePhoto(highQuality = false) {
       await ensureHighresMatteForPhoto(photo);
     }
 
+    const useHQ = Boolean(highQuality || state.zoomScale >= 1.35);
     const res = await invoke('process_photo_cmd', {
       imageBase64: photo.originalDataUrl,
       params: buildInvokeParams(photo),
-      highQuality,
+      highQuality: useHQ,
       maskBase64: photo.maskBase64 || null,
       sceneMaskBase64: getEffectiveSceneMask(photo),
     });
     photo.processedDataUrl = res.dataUrl;
+    photo._processedHQ = useHQ;
     const aiBadge = photo.landmarksDetected ? 'AI 478 điểm ✓' : 'Mặt nạ chân dung AI ✓';
     renderTimeLabel.textContent = `${aiBadge} • ${res.elapsedMs}ms`;
     await renderViewport();
@@ -2209,6 +2485,7 @@ async function rotateActivePhoto90(clockwise) {
 
     syncSlidersFromParams();
     await processActivePhoto(false);
+    commitHistory(photo);
   } catch (err) {
     console.error('Lỗi xoay 90°:', err);
   }
@@ -2253,6 +2530,7 @@ function syncSlidersFromParams() {
   updateBgCustomControlsUI(p);
   updateClothingControlsUI(p);
   updateCropControlsUI(photo);
+  updateHistoryButtonsUI(photo);
 
   renderToneCurveCanvas();
 }
@@ -2295,7 +2573,54 @@ function setWorkspaceMode(mode) {
   toolbar?.classList.toggle('hidden', isGrid);
   filmstrip?.classList.toggle('hidden', isGrid);
 
-  if (isGrid) renderLibraryGrid();
+  if (isGrid) {
+    renderLibraryGrid();
+  } else {
+    requestAnimationFrame(() => {
+      renderViewport();
+      updateZoomUI();
+    });
+  }
+}
+
+function getEffectiveOutputDimensions(photo) {
+  const { imgW, imgH } = getPhotoDimensions(photo);
+  const p = photo?.params;
+  if (!p) return { w: imgW, h: imgH };
+  const isCropped = hasActiveCropRect(p);
+  const cw = Math.max(1, Math.round((isCropped ? p.cropW : 1) * imgW));
+  const ch = Math.max(1, Math.round((isCropped ? p.cropH : 1) * imgH));
+  if (p.cropCustomW > 0 && p.cropCustomH > 0) {
+    return { w: Math.round(p.cropCustomW), h: Math.round(p.cropCustomH) };
+  }
+  if (p.cropCustomW > 0) {
+    return { w: Math.round(p.cropCustomW), h: Math.max(1, Math.round((p.cropCustomW * ch) / cw)) };
+  }
+  if (p.cropCustomH > 0) {
+    return { w: Math.max(1, Math.round((p.cropCustomH * cw) / ch)), h: Math.round(p.cropCustomH) };
+  }
+  return { w: cw, h: ch };
+}
+
+function drawCroppedThumbCanvas(thumbCanvas, photo, tw, th) {
+  loadImageElement(photo.processedDataUrl || photo.originalDataUrl)
+    .then((img) => {
+      const tCtx = thumbCanvas.getContext('2d');
+      if (!tCtx) return;
+      const sw = img.naturalWidth || tw;
+      const sh = img.naturalHeight || th;
+      const isCropped = hasActiveCropRect(photo.params);
+      const sx = isCropped ? Math.max(0, Math.min(sw - 1, photo.params.cropX * sw)) : 0;
+      const sy = isCropped ? Math.max(0, Math.min(sh - 1, photo.params.cropY * sh)) : 0;
+      const cw = isCropped ? Math.max(1, Math.min(sw - sx, photo.params.cropW * sw)) : sw;
+      const ch = isCropped ? Math.max(1, Math.min(sh - sy, photo.params.cropH * sh)) : sh;
+      const scale = Math.max(tw / cw, th / ch);
+      const dw = cw * scale;
+      const dh = ch * scale;
+      tCtx.clearRect(0, 0, tw, th);
+      tCtx.drawImage(img, sx, sy, cw, ch, (tw - dw) * 0.5, (th - dh) * 0.5, dw, dh);
+    })
+    .catch(() => {});
 }
 
 function renderLibraryGrid() {
@@ -2309,10 +2634,11 @@ function renderLibraryGrid() {
 
     const media = document.createElement('div');
     media.className = 'library-card-media';
-    const img = document.createElement('img');
-    img.src = p.processedDataUrl || p.originalDataUrl;
-    img.alt = p.name;
-    media.appendChild(img);
+    const thumbCanvas = document.createElement('canvas');
+    thumbCanvas.width = 320;
+    thumbCanvas.height = 240;
+    drawCroppedThumbCanvas(thumbCanvas, p, 320, 240);
+    media.appendChild(thumbCanvas);
 
     if (isPhotoEdited(p.params)) {
       const badge = document.createElement('span');
@@ -2321,9 +2647,18 @@ function renderLibraryGrid() {
       media.appendChild(badge);
     }
 
+    const dims = getEffectiveOutputDimensions(p);
     const meta = document.createElement('div');
     meta.className = 'library-card-meta';
-    meta.innerHTML = `<div class="library-card-name" title="${p.name}">${p.name}</div><div class="library-card-dim">${p.width || '?'} × ${p.height || '?'} px</div>`;
+    const nameEl = document.createElement('div');
+    nameEl.className = 'library-card-name';
+    nameEl.title = p.name || '';
+    nameEl.textContent = p.name || '';
+    const dimEl = document.createElement('div');
+    dimEl.className = 'library-card-dim';
+    dimEl.textContent = `${dims.w || '?'} × ${dims.h || '?'} px`;
+    meta.appendChild(nameEl);
+    meta.appendChild(dimEl);
 
     card.appendChild(media);
     card.appendChild(meta);
@@ -2363,20 +2698,7 @@ function renderFilmstrip() {
     thumbCanvas.height = 96;
     item.appendChild(thumbCanvas);
 
-    loadImageElement(p.processedDataUrl || p.originalDataUrl).then((img) => {
-      const tCtx = thumbCanvas.getContext('2d');
-      const sw = img.naturalWidth || 96;
-      const sh = img.naturalHeight || 96;
-      const isCropped = hasActiveCropRect(p.params);
-      const sx = isCropped ? Math.max(0, Math.min(sw - 1, p.params.cropX * sw)) : 0;
-      const sy = isCropped ? Math.max(0, Math.min(sh - 1, p.params.cropY * sh)) : 0;
-      const cw = isCropped ? Math.max(1, Math.min(sw - sx, p.params.cropW * sw)) : sw;
-      const ch = isCropped ? Math.max(1, Math.min(sh - sy, p.params.cropH * sh)) : sh;
-      const scale = Math.max(96 / cw, 96 / ch);
-      const dw = cw * scale;
-      const dh = ch * scale;
-      tCtx.drawImage(img, sx, sy, cw, ch, (96 - dw) * 0.5, (96 - dh) * 0.5, dw, dh);
-    });
+    drawCroppedThumbCanvas(thumbCanvas, p, 96, 96);
 
     if (isPhotoEdited(p.params)) {
       const dot = document.createElement('div');
@@ -2399,6 +2721,9 @@ function renderFilmstrip() {
     });
 
     filmstripTrack.appendChild(item);
+    if (idx === state.activeIndex) {
+      item.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
   });
 }
 
@@ -2426,7 +2751,14 @@ function renderUserPresetsList() {
 
     const meta = document.createElement('div');
     meta.className = 'preset-meta';
-    meta.innerHTML = `<div class="p-title">${preset.name}</div><div class="p-sub">Đã lưu</div>`;
+    const titleEl = document.createElement('div');
+    titleEl.className = 'p-title';
+    titleEl.textContent = preset.name;
+    const subEl = document.createElement('div');
+    subEl.className = 'p-sub';
+    subEl.textContent = 'Đã lưu';
+    meta.appendChild(titleEl);
+    meta.appendChild(subEl);
 
     const del = document.createElement('span');
     del.className = 'preset-delete-x';
@@ -2452,6 +2784,7 @@ function renderUserPresetsList() {
       curr.params = { ...createDefaultParams(), ...JSON.parse(JSON.stringify(preset.params)) };
       curr.params.face = ownFace;
       syncSlidersFromParams();
+      commitHistory(curr);
       processActivePhoto(false);
     });
 
@@ -2462,7 +2795,10 @@ function renderUserPresetsList() {
 function saveCurrentAsUserPreset() {
   const photo = getActivePhoto();
   if (!photo) return;
-  const name = `Cài sẵn #${state.userPresets.length + 1}`;
+  let nextNum = state.userPresets.length + 1;
+  const usedNames = new Set(state.userPresets.map((u) => u.name));
+  while (usedNames.has(`Cài sẵn #${nextNum}`)) nextNum++;
+  const name = `Cài sẵn #${nextNum}`;
   const saved = JSON.parse(JSON.stringify(photo.params));
   state.userPresets.push({ name, params: saved });
   persistUserPresets(state.userPresets);
@@ -2507,6 +2843,8 @@ async function openNativeImportDialog() {
 
 async function importPathsFromRust(paths) {
   renderTimeLabel.textContent = 'Đang nhập & quét AI 478 điểm khuôn mặt...';
+  let importedCount = 0;
+  let lastError = null;
   for (const filePath of paths) {
     try {
       const payload = await invoke('load_photo_from_path_cmd', { filePath });
@@ -2528,10 +2866,18 @@ async function importPathsFromRust(paths) {
         landmarksDetected: aiResult.landmarksDetected,
         params,
       });
+      initPhotoHistory(state.photos[state.photos.length - 1]);
       state.activeIndex = state.photos.length - 1;
+      importedCount++;
     } catch (e) {
+      lastError = e;
       console.error('Lỗi tải tệp qua Rust:', filePath, e);
     }
+  }
+  if (importedCount === 0) {
+    const detail = lastError ? ` (${String(lastError)})` : '';
+    renderTimeLabel.textContent = `Không thể mở tệp ảnh đã chọn${detail}`;
+    return;
   }
   document.querySelectorAll('.retouch-preset-item').forEach((c) => c.classList.remove('active'));
   syncSlidersFromParams();
@@ -2541,42 +2887,60 @@ async function importPathsFromRust(paths) {
 async function importHtmlFileList(fileList) {
   if (!fileList || fileList.length === 0) return;
   renderTimeLabel.textContent = 'Đang nhập ảnh & quét AI 478 điểm...';
+  let importedCount = 0;
+  let failedName = '';
 
   for (const file of Array.from(fileList)) {
-    const dataUrl = await new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.readAsDataURL(file);
-    });
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error('FileReader error'));
+        reader.readAsDataURL(file);
+      });
 
-    const img = await loadImageElement(dataUrl);
-    const params = createDefaultParams();
+      const img = await loadImageElement(dataUrl);
+      const params = createDefaultParams();
 
-    let fallbackFace = params.face;
-    if (hasTauriRuntime()) {
-      try {
-        const detected = await invoke('analyze_portrait_cmd', { imageBase64: dataUrl });
-        if (detected) fallbackFace = detected;
-      } catch (_) {}
+      let fallbackFace = params.face;
+      if (hasTauriRuntime()) {
+        try {
+          const detected = await invoke('analyze_portrait_cmd', { imageBase64: dataUrl });
+          if (detected) fallbackFace = detected;
+        } catch (_) {}
+      }
+
+      const aiResult = await analyzePhotoWithNeuralAI(img, fallbackFace);
+      params.face = aiResult.face;
+
+      state.photos.push({
+        id: Date.now() + Math.random(),
+        name: file.name,
+        originalDataUrl: dataUrl,
+        processedDataUrl: dataUrl,
+        width: img.naturalWidth,
+        height: img.naturalHeight,
+        mesh478: aiResult.mesh478,
+        maskBase64: aiResult.maskBase64,
+        sceneMaskBase64: aiResult.sceneMaskBase64,
+        landmarksDetected: aiResult.landmarksDetected,
+        params,
+      });
+      initPhotoHistory(state.photos[state.photos.length - 1]);
+      state.activeIndex = state.photos.length - 1;
+      importedCount++;
+    } catch (err) {
+      failedName = file?.name || '';
+      console.error('Lỗi đọc tệp ảnh trên trình duyệt:', failedName, err);
     }
+  }
 
-    const aiResult = await analyzePhotoWithNeuralAI(img, fallbackFace);
-    params.face = aiResult.face;
-
-    state.photos.push({
-      id: Date.now() + Math.random(),
-      name: file.name,
-      originalDataUrl: dataUrl,
-      processedDataUrl: dataUrl,
-      width: img.naturalWidth,
-      height: img.naturalHeight,
-      mesh478: aiResult.mesh478,
-      maskBase64: aiResult.maskBase64,
-      sceneMaskBase64: aiResult.sceneMaskBase64,
-      landmarksDetected: aiResult.landmarksDetected,
-      params,
-    });
-    state.activeIndex = state.photos.length - 1;
+  if (importedCount === 0) {
+    const isRaw = /\.(dng|cr2|cr3|crw|nef|arw|orf|rw2|raf|pef|srw|heic)$/i.test(failedName);
+    renderTimeLabel.textContent = isRaw && !hasTauriRuntime()
+      ? `Trình duyệt không giải mã được RAW (${failedName}) — hãy chạy bằng app Desktop (tauri dev)`
+      : `Không thể đọc tệp ảnh ${failedName}`;
+    return;
   }
 
   document.querySelectorAll('.retouch-preset-item').forEach((c) => c.classList.remove('active'));
@@ -2624,8 +2988,10 @@ function applyResetActivePhoto() {
   photo.params = createDefaultParams();
   photo.params.face = faceBackup;
   photo.curvePoints = null;
+  state.cropPreviewMode = false;
   document.querySelectorAll('.retouch-preset-item').forEach((c) => c.classList.remove('active'));
   syncSlidersFromParams();
+  commitHistory(photo);
   processActivePhoto(false);
 }
 
@@ -2640,8 +3006,10 @@ async function applySyncToAllPhotos() {
       target.params = JSON.parse(JSON.stringify(source.params));
       target.params.face = ownFace;
       target.params.blemishSpots = [];
+      commitHistory(target);
     }
     renderFilmstrip();
+    if (state.workspaceMode === 'grid') renderLibraryGrid();
     renderTimeLabel.textContent = `Đã đồng bộ thông số cho ${state.photos.length} ảnh ✓`;
     return;
   }
@@ -2655,19 +3023,25 @@ async function applySyncToAllPhotos() {
     target.params = JSON.parse(JSON.stringify(source.params));
     target.params.face = ownFace;
     target.params.blemishSpots = [];
-    if (needsHighresMatte(target.params)) {
-      await ensureHighresMatteForPhoto(target);
+    try {
+      if (needsHighresMatte(target.params)) {
+        await ensureHighresMatteForPhoto(target);
+      }
+      const res = await invoke('process_photo_cmd', {
+        imageBase64: target.originalDataUrl,
+        params: buildInvokeParams(target),
+        highQuality: false,
+        maskBase64: target.maskBase64 || null,
+        sceneMaskBase64: getEffectiveSceneMask(target),
+      });
+      target.processedDataUrl = res.dataUrl;
+      commitHistory(target);
+    } catch (err) {
+      console.error('Lỗi đồng bộ ảnh:', target.name, err);
     }
-    const res = await invoke('process_photo_cmd', {
-      imageBase64: target.originalDataUrl,
-      params: buildInvokeParams(target),
-      highQuality: false,
-      maskBase64: target.maskBase64 || null,
-      sceneMaskBase64: getEffectiveSceneMask(target),
-    });
-    target.processedDataUrl = res.dataUrl;
   }
   renderFilmstrip();
+  if (state.workspaceMode === 'grid') renderLibraryGrid();
   renderTimeLabel.textContent = `Đã đồng bộ xong ${state.photos.length} ảnh ✓`;
 }
 
@@ -2799,6 +3173,7 @@ function setupRetouchEvents() {
       }
       photo.params.bgReplaceMode = mode;
       updateBgCustomControlsUI(photo.params);
+      commitHistory(photo);
       processActivePhoto(false);
     });
   });
@@ -2844,6 +3219,7 @@ function setupRetouchEvents() {
           pts.splice(i, 1);
           photo.params.curveLut = build256CurveLutFromPoints(pts);
           renderToneCurveCanvas();
+          commitHistory(photo);
           processActivePhoto(false);
           break;
         }
@@ -2863,6 +3239,7 @@ function setupRetouchEvents() {
     ];
     photo.params.curveLut = [];
     renderToneCurveCanvas();
+    commitHistory(photo);
     processActivePhoto(false);
   });
 
@@ -2884,6 +3261,7 @@ function setupRetouchEvents() {
       photo.params.colorMatchStrength = 65;
     }
     syncSlidersFromParams();
+    commitHistory(photo);
     processActivePhoto(false);
     refInput.value = '';
   });
@@ -2894,6 +3272,7 @@ function setupRetouchEvents() {
     photo.params.colorMatchStats = [];
     photo.params.colorMatchStrength = 0;
     syncSlidersFromParams();
+    commitHistory(photo);
     processActivePhoto(false);
   });
 
@@ -2925,6 +3304,7 @@ function setupRetouchEvents() {
         constrainCropBoxInsideRotatedBounds(photo, def);
         updateCropControlsUI(photo);
       }
+      commitHistory(photo);
       processActivePhoto(false);
     };
 
@@ -2981,13 +3361,14 @@ function setupRetouchEvents() {
     });
 
     slider.addEventListener('change', () => {
+      const photo = getActivePhoto();
       if (key === 'rotateAngle' && state.draggingRotateAngle) {
         state.draggingRotateAngle = false;
-        const photo = getActivePhoto();
         if (photo && overlayCanvas.width && overlayCanvas.height) {
           drawOverlayGuides(overlayCanvas.width, overlayCanvas.height, photo);
         }
       }
+      if (photo) commitHistory(photo);
       if (!state.realtimeColor) {
         processActivePhoto(false);
       }
@@ -3010,6 +3391,7 @@ function setupRetouchEvents() {
       if (BG_SELECT_IDS.includes(selId)) {
         updateBgCustomControlsUI(photo.params);
       }
+      commitHistory(photo);
       processActivePhoto(false);
     });
   }
@@ -3021,6 +3403,7 @@ function setupRetouchEvents() {
     photo.params.bgCustomColor = e.target.value;
     photo.params.bgReplaceMode = 'custom_color';
     updateBgCustomControlsUI(photo.params);
+    if (e.type === 'change') commitHistory(photo);
     processActivePhoto(false);
   };
   document.getElementById('bgCustomColor')?.addEventListener('input', handleCustomColorPick);
@@ -3034,6 +3417,7 @@ function setupRetouchEvents() {
       photo.params.bgCustomColor = hex;
       photo.params.bgReplaceMode = 'custom_color';
       updateBgCustomControlsUI(photo.params);
+      commitHistory(photo);
       processActivePhoto(false);
     });
   });
@@ -3073,6 +3457,7 @@ function setupRetouchEvents() {
     state.bgLibTab = 'user';
     customBgInput.value = '';
     updateBgCustomControlsUI(photo.params);
+    commitHistory(photo);
     processActivePhoto(false);
   });
 
@@ -3084,6 +3469,7 @@ function setupRetouchEvents() {
       photo.params.bgReplaceMode = 'original';
     }
     updateBgCustomControlsUI(photo.params);
+    commitHistory(photo);
     processActivePhoto(false);
   });
 
@@ -3128,6 +3514,7 @@ function setupRetouchEvents() {
     if (!photo) return;
     photo.params.bgReplaceMode = 'original';
     updateBgCustomControlsUI(photo.params);
+    commitHistory(photo);
     processActivePhoto(false);
   });
 
@@ -3137,6 +3524,7 @@ function setupRetouchEvents() {
       if (!photo) return;
       photo.params[swId] = !Boolean(photo.params[swId]);
       updateBgCustomControlsUI(photo.params);
+      commitHistory(photo);
       processActivePhoto(false);
     });
   }
@@ -3157,6 +3545,7 @@ function setupRetouchEvents() {
       if (opSlider) opSlider.value = String(photo.params.bgShadowOpacity);
       if (opBadge) opBadge.textContent = formatSliderBadgeValue(photo.params.bgShadowOpacity, 'bgShadowOpacity');
       updateBgCustomControlsUI(photo.params);
+      commitHistory(photo);
       processActivePhoto(false);
     });
   });
@@ -3252,6 +3641,9 @@ function setupRetouchEvents() {
           : 'LiYing AI Thay nền ✓';
         renderTimeLabel.textContent = `${statusTag} • ${res.elapsed_ms}ms`;
 
+        photo._isLiyingOutput = true;
+        commitHistory(photo);
+
         await renderViewport();
         renderFilmstrip();
         if (state.workspaceMode === 'grid') renderLibraryGrid();
@@ -3278,6 +3670,7 @@ function setupRetouchEvents() {
       if (!photo) return;
       photo.params.clothingTarget = pill.dataset.clothtarget || 'all';
       updateClothingControlsUI(photo.params);
+      commitHistory(photo);
       processActivePhoto(false);
     });
   });
@@ -3308,6 +3701,7 @@ function setupRetouchEvents() {
       photo.params[k] = def[k];
     }
     syncSlidersFromParams(photo);
+    commitHistory(photo);
     processActivePhoto(false);
   });
 
@@ -3343,6 +3737,7 @@ function setupRetouchEvents() {
           badge.textContent = '45';
           badge.classList.add('modified');
         }
+        commitHistory(photo);
         processActivePhoto(false);
       }
       document.getElementById('clothingMoireRemove')?.focus();
@@ -3360,6 +3755,7 @@ function setupRetouchEvents() {
     if (!photo) return;
     photo.params.flipVertical = !photo.params.flipVertical;
     updateCropControlsUI(photo);
+    commitHistory(photo);
     processActivePhoto(false);
   });
 
@@ -3368,6 +3764,7 @@ function setupRetouchEvents() {
     if (!photo) return;
     photo.params.flipHorizontal = !photo.params.flipHorizontal;
     updateCropControlsUI(photo);
+    commitHistory(photo);
     processActivePhoto(false);
   });
 
@@ -3527,6 +3924,7 @@ function setupRetouchEvents() {
 
       state.cropPreviewMode = false;
       updateCropControlsUI(photo);
+      commitHistory(photo);
       renderViewport();
     });
   });
@@ -3552,6 +3950,8 @@ function setupRetouchEvents() {
 
   document.getElementById('crop-ratio-w-in')?.addEventListener('input', handleCustomRatioChange);
   document.getElementById('crop-ratio-h-in')?.addEventListener('input', handleCustomRatioChange);
+  document.getElementById('crop-ratio-w-in')?.addEventListener('change', () => commitHistory(getActivePhoto()));
+  document.getElementById('crop-ratio-h-in')?.addEventListener('change', () => commitHistory(getActivePhoto()));
   document.getElementById('btn-crop-swap-ratio')?.addEventListener('click', () => {
     const rwIn = document.getElementById('crop-ratio-w-in');
     const rhIn = document.getElementById('crop-ratio-h-in');
@@ -3561,6 +3961,7 @@ function setupRetouchEvents() {
       rhIn.value = tmp;
     }
     handleCustomRatioChange();
+    commitHistory(getActivePhoto());
   });
 
   // Dài*Rộng*Độ phân giải (px / cm / mm + DPI)
@@ -3593,8 +3994,14 @@ function setupRetouchEvents() {
 
   document.getElementById('crop-custom-w-in')?.addEventListener('input', () => handleCustomDimOrDpiChange(true));
   document.getElementById('crop-custom-h-in')?.addEventListener('input', () => handleCustomDimOrDpiChange(true));
-  document.getElementById('crop-dim-unit')?.addEventListener('change', () => handleCustomDimOrDpiChange(true));
+  document.getElementById('crop-custom-w-in')?.addEventListener('change', () => commitHistory(getActivePhoto()));
+  document.getElementById('crop-custom-h-in')?.addEventListener('change', () => commitHistory(getActivePhoto()));
+  document.getElementById('crop-dim-unit')?.addEventListener('change', () => {
+    handleCustomDimOrDpiChange(true);
+    commitHistory(getActivePhoto());
+  });
   document.getElementById('crop-dpi-in')?.addEventListener('input', () => handleCustomDimOrDpiChange(false));
+  document.getElementById('crop-dpi-in')?.addEventListener('change', () => commitHistory(getActivePhoto()));
   document.getElementById('btn-crop-swap-dim')?.addEventListener('click', () => {
     const cwIn = document.getElementById('crop-custom-w-in');
     const chIn = document.getElementById('crop-custom-h-in');
@@ -3604,6 +4011,7 @@ function setupRetouchEvents() {
       chIn.value = tmp;
     }
     handleCustomDimOrDpiChange(true);
+    commitHistory(getActivePhoto());
   });
 
   // Preset Ảnh Thẻ (2×3, 3×4, 4×6, Visa, 5×5, 3.3×4.8 cm)
@@ -3620,6 +4028,7 @@ function setupRetouchEvents() {
       );
       state.cropPreviewMode = false;
       updateCropControlsUI(photo);
+      commitHistory(photo);
       renderViewport();
     });
   });
@@ -3650,6 +4059,7 @@ function setupRetouchEvents() {
     };
     fitCropBoxToAspect(photo, nextRatio, anchor);
     updateCropControlsUI(photo);
+    commitHistory(photo);
     renderViewport();
   });
 
@@ -3658,6 +4068,7 @@ function setupRetouchEvents() {
     if (!photo) return;
     state.cropPreviewMode = !state.cropPreviewMode;
     updateCropControlsUI(photo);
+    commitHistory(photo);
     renderViewport();
   });
 
@@ -3666,6 +4077,7 @@ function setupRetouchEvents() {
     if (!photo) return;
     state.cropPreviewMode = true;
     updateCropControlsUI(photo);
+    commitHistory(photo);
     renderViewport();
     renderFilmstrip();
     if (state.workspaceMode === 'grid') renderLibraryGrid();
@@ -3699,6 +4111,7 @@ function setupRetouchEvents() {
     syncSlidersFromParams();
     updateCropControlsUI(photo);
     renderFilmstrip();
+    commitHistory(photo);
     if (hadRotate) {
       processActivePhoto(false);
     } else {
@@ -3713,6 +4126,7 @@ function setupRetouchEvents() {
     const photo = getActivePhoto();
     if (!photo) return;
     photo.params.cropShowGrid = Boolean(e.target.checked);
+    commitHistory(photo);
     if (overlayCanvas.width && overlayCanvas.height) {
       drawOverlayGuides(overlayCanvas.width, overlayCanvas.height, photo);
     }
@@ -3789,6 +4203,7 @@ function setupRetouchEvents() {
       fresh.blemishSpots = photo.params.blemishSpots;
       photo.params = { ...fresh, ...presetValues };
       syncSlidersFromParams();
+      commitHistory(photo);
       processActivePhoto(false);
     });
   });
@@ -3824,9 +4239,11 @@ function setupRetouchEvents() {
     }
   });
 
-  // Thu phóng (Fit / 1:1 / +/-)
+  // Thu phóng (Fit / 1:1 / +/- và Alt + Lăn chuột trong preview)
   document.getElementById('btn-zoom-fit')?.addEventListener('click', () => {
     state.zoomScale = 1;
+    state.panX = 0;
+    state.panY = 0;
     updateZoomUI();
   });
   document.getElementById('btn-zoom-100')?.addEventListener('click', () => {
@@ -3834,13 +4251,52 @@ function setupRetouchEvents() {
     updateZoomUI();
   });
   document.getElementById('btn-zoom-in')?.addEventListener('click', () => {
-    state.zoomScale = Math.min(3.5, +(state.zoomScale + 0.25).toFixed(2));
+    state.zoomScale = Math.min(4.0, +(state.zoomScale + 0.25).toFixed(2));
     updateZoomUI();
   });
   document.getElementById('btn-zoom-out')?.addEventListener('click', () => {
     state.zoomScale = Math.max(0.5, +(state.zoomScale - 0.25).toFixed(2));
     updateZoomUI();
   });
+
+  const viewportEl = document.getElementById('canvas-viewport');
+  viewportEl?.addEventListener(
+    'wheel',
+    (e) => {
+      if (!e.altKey || !getActivePhoto()) return;
+      e.preventDefault();
+      if (!e.deltaY) return;
+
+      const oldScale = state.zoomScale;
+      const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+      let nextScale = Math.max(0.5, Math.min(4.0, +(oldScale * factor).toFixed(3)));
+      if (
+        Math.abs(nextScale - 1) < 0.06 &&
+        ((oldScale > 1 && e.deltaY > 0) || (oldScale < 1 && e.deltaY < 0))
+      ) {
+        nextScale = 1;
+      }
+      if (Math.abs(nextScale - oldScale) < 1e-4) return;
+
+      if (nextScale <= 1) {
+        state.panX = 0;
+        state.panY = 0;
+      } else if (canvasWrap) {
+        const rect = canvasWrap.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          const cx = rect.left + rect.width * 0.5;
+          const cy = rect.top + rect.height * 0.5;
+          const k = nextScale / oldScale;
+          state.panX = state.panX - (e.clientX - cx) * (k - 1);
+          state.panY = state.panY - (e.clientY - cy) * (k - 1);
+        }
+      }
+
+      state.zoomScale = nextScale;
+      updateZoomUI();
+    },
+    { passive: false }
+  );
 
   const mapViewportToFullNorm = (photo, nx, ny) => {
     if (!photo || !isViewingCroppedViewport(photo)) return { x: nx, y: ny };
@@ -3984,6 +4440,23 @@ function setupRetouchEvents() {
     }
   };
 
+  viewportEl?.addEventListener(
+    'mousedown',
+    (e) => {
+      if (!state.spacePressed || e.button !== 0 || !getActivePhoto()) return;
+      e.preventDefault();
+      e.stopPropagation();
+      state.draggingPan = {
+        startX: e.clientX,
+        startY: e.clientY,
+        origPanX: state.panX,
+        origPanY: state.panY,
+      };
+      viewportEl.classList.add('hand-pan-dragging');
+    },
+    true
+  );
+
   // Kéo thanh chia đôi, Đường cong, Mốc mặt, Khung cắt
   splitLine.addEventListener('mousedown', (e) => {
     e.preventDefault();
@@ -3991,6 +4464,13 @@ function setupRetouchEvents() {
   });
 
   window.addEventListener('mousemove', (e) => {
+    if (state.draggingPan) {
+      state.panX = state.draggingPan.origPanX + (e.clientX - state.draggingPan.startX);
+      state.panY = state.draggingPan.origPanY + (e.clientY - state.draggingPan.startY);
+      updateZoomUI();
+      return;
+    }
+
     if (state.draggingCrop) {
       const photo = getActivePhoto();
       if (!photo) return;
@@ -4091,6 +4571,10 @@ function setupRetouchEvents() {
   });
 
   window.addEventListener('mouseup', () => {
+    if (state.draggingPan) {
+      state.draggingPan = null;
+      viewportEl?.classList.remove('hand-pan-dragging');
+    }
     if (state.draggingCrop) {
       state.draggingCrop = null;
       const photo = getActivePhoto();
@@ -4098,6 +4582,7 @@ function setupRetouchEvents() {
         drawOverlayGuides(overlayCanvas.width, overlayCanvas.height, photo);
         updateCropControlsUI(photo);
       }
+      if (photo) commitHistory(photo);
     }
     if (state.draggingRotateAngle) {
       state.draggingRotateAngle = false;
@@ -4105,10 +4590,12 @@ function setupRetouchEvents() {
       if (photo && overlayCanvas.width && overlayCanvas.height) {
         drawOverlayGuides(overlayCanvas.width, overlayCanvas.height, photo);
       }
+      if (photo) commitHistory(photo);
     }
     if (state.draggingCurveIdx !== -1) {
       state.draggingCurveIdx = -1;
       renderToneCurveCanvas();
+      commitHistory(getActivePhoto());
       if (!state.realtimeColor) processActivePhoto(false);
     }
     if (state.draggingLandmark) {
@@ -4117,6 +4604,7 @@ function setupRetouchEvents() {
       if (photo && !photo.landmarksDetected) {
         photo.maskBase64 = null;
       }
+      commitHistory(photo);
       processActivePhoto(false);
     }
     state.draggingSplit = false;
@@ -4200,6 +4688,7 @@ function setupRetouchEvents() {
         y: Math.max(0, Math.min(1, mapped.y)),
         radius: 0.016,
       });
+      commitHistory(photo);
       processActivePhoto(false);
     }
   });
@@ -4230,6 +4719,7 @@ function setupRetouchEvents() {
     const photo = getActivePhoto();
     if (photo && photo.params.blemishSpots.length > 0) {
       photo.params.blemishSpots.pop();
+      commitHistory(photo);
       processActivePhoto(false);
     }
   });
@@ -4238,6 +4728,7 @@ function setupRetouchEvents() {
     const photo = getActivePhoto();
     if (photo) {
       photo.params.blemishSpots = [];
+      commitHistory(photo);
       processActivePhoto(false);
     }
   });
@@ -4283,14 +4774,50 @@ function setupRetouchEvents() {
     photo.params = JSON.parse(JSON.stringify(state.copiedParams));
     photo.params.face = ownFace;
     syncSlidersFromParams();
+    commitHistory(photo);
     processActivePhoto(false);
   };
 
   window.addEventListener('keydown', (e) => {
-    const tag = document.activeElement?.tagName;
+    const activeEl = document.activeElement;
+    const tag = activeEl?.tagName;
+    const isTextEntry =
+      tag === 'TEXTAREA' ||
+      (tag === 'INPUT' &&
+        !['range', 'checkbox', 'radio', 'color', 'button', 'submit'].includes(
+          (activeEl.type || 'text').toLowerCase()
+        ));
+
+    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+      const k = e.key.toLowerCase();
+      if (k === 'z' && !isTextEntry) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          redoActivePhoto();
+        } else {
+          undoActivePhoto();
+        }
+        return;
+      }
+      if (k === 'y' && !e.shiftKey && !isTextEntry) {
+        e.preventDefault();
+        redoActivePhoto();
+        return;
+      }
+    }
+
+    if (e.code === 'Space' && !isTextEntry && state.workspaceMode === 'develop') {
+      e.preventDefault();
+      if (!state.spacePressed) {
+        state.spacePressed = true;
+        viewportEl?.classList.add('hand-pan-ready');
+      }
+      return;
+    }
+
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
-    if ((e.code === 'Space' || e.key === '\\') && !state.holdingBefore) {
+    if (e.key === '\\' && !state.holdingBefore) {
       e.preventDefault();
       state.holdingBefore = true;
       renderViewport();
@@ -4319,20 +4846,46 @@ function setupRetouchEvents() {
       syncSlidersFromParams();
       renderViewport();
       renderFilmstrip();
+      if (state.workspaceMode === 'grid') renderLibraryGrid();
+      prewarmActiveHighresMatte();
     } else if (e.key === 'ArrowLeft' && state.activeIndex > 0) {
       state.activeIndex--;
       syncSlidersFromParams();
       renderViewport();
       renderFilmstrip();
+      if (state.workspaceMode === 'grid') renderLibraryGrid();
+      prewarmActiveHighresMatte();
     }
   });
 
   window.addEventListener('keyup', (e) => {
-    if ((e.code === 'Space' || e.key === '\\') && state.holdingBefore) {
+    if (e.code === 'Space') {
+      state.spacePressed = false;
+      viewportEl?.classList.remove('hand-pan-ready');
+    }
+    if (e.key === '\\' && state.holdingBefore) {
       state.holdingBefore = false;
       renderViewport();
     }
   });
+
+  window.addEventListener('blur', () => {
+    const needViewport = state.holdingBefore;
+    state.holdingBefore = false;
+    state.spacePressed = false;
+    state.draggingPan = null;
+    viewportEl?.classList.remove('hand-pan-ready', 'hand-pan-dragging');
+    state.draggingSplit = false;
+    state.draggingCrop = null;
+    state.draggingCurveIdx = -1;
+    state.draggingLandmark = null;
+    state.draggingRotateAngle = false;
+    if (needViewport) renderViewport();
+  });
+
+  document.getElementById('btn-undo')?.addEventListener('click', undoActivePhoto);
+  document.getElementById('btn-redo')?.addEventListener('click', redoActivePhoto);
+  updateHistoryButtonsUI();
 
   document.getElementById('btn-reset-all')?.addEventListener('click', applyResetActivePhoto);
   document.getElementById('btn-reset-all-footer')?.addEventListener('click', applyResetActivePhoto);
@@ -4387,6 +4940,8 @@ function setupRetouchEvents() {
           renderTimeLabel.textContent = 'Đã xuất ảnh ra ổ đĩa ✓';
           return;
         }
+        renderTimeLabel.textContent = 'Đã hủy xuất ảnh';
+        return;
       } catch (err) {
         console.warn('Chuyển sang tải xuống trực tiếp:', err);
       }
@@ -4454,6 +5009,23 @@ async function initRetouchStudio() {
   renderUserPresetsList();
   updateZoomUI();
 
+  const viewportEl = document.getElementById('canvas-viewport');
+  let _resizeRaf = 0;
+  const scheduleViewportSync = () => {
+    cancelAnimationFrame(_resizeRaf);
+    _resizeRaf = requestAnimationFrame(() => {
+      if (state.workspaceMode !== 'develop' || !getActivePhoto()) return;
+      renderViewport();
+      updateZoomUI();
+    });
+  };
+  if (viewportEl && typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(() => scheduleViewportSync());
+    ro.observe(viewportEl);
+  } else {
+    window.addEventListener('resize', scheduleViewportSync);
+  }
+
   const realDemoSamples = [
     { url: '/samples/portrait_3.jpg', name: 'Chan_dung_Ao_do.jpg' },
     { url: '/samples/portrait_4.jpg', name: 'Chan_dung_Studio_Neon.jpg' },
@@ -4491,6 +5063,7 @@ async function initRetouchStudio() {
         landmarksDetected: aiResult.landmarksDetected,
         params,
       });
+      initPhotoHistory(state.photos[state.photos.length - 1]);
     } catch (err) {
       console.error('Lỗi tải ảnh mẫu:', realDemoSamples[i].url, err);
     }

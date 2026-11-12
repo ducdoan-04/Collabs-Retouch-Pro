@@ -1057,7 +1057,8 @@ fn build_semantic_grid(
                             let matte_a = s[0].clamp(0.0, 1.0);
                             let h_val = b_hair.max(if geo.hair > 0.12 && matte_a > 0.05 { matte_a } else { 0.0 });
                             let sol_p = (matte_a * (1.0 - h_val * 0.75)).clamp(0.0, 1.0).max(solid_face);
-                            (matte_a, geo.clothing * matte_a, h_val, sol_p)
+                            let cloth_p = (geo.clothing * matte_a * (1.0 - h_val * 0.85)).clamp(0.0, 1.0);
+                            (matte_a, cloth_p, h_val, sol_p)
                         } else {
                             (
                                 s[0].clamp(0.0, 1.0),
@@ -1105,7 +1106,11 @@ fn build_semantic_grid(
                     solid_row[x] = solid_prob;
 
                     row[x] = SemanticWeights {
-                        skin: r_skin.max(geo.skin * 0.35),
+                        skin: if mask_img.is_some() && ny <= face.chin_y {
+                            r_skin
+                        } else {
+                            r_skin.max(geo.skin * 0.35)
+                        },
                         forehead: if g_code.abs_diff(30) <= 6 { 1.0 } else { geo.forehead * 0.5 },
                         under_eye: if g_code.abs_diff(60) <= 6 { 1.0 } else { geo.under_eye * 0.5 },
                         nasolabial: if g_code.abs_diff(85) <= 6 { 1.0 } else { geo.nasolabial * 0.6 },
@@ -1343,38 +1348,6 @@ fn hsv_to_rgb(h: f32, s: f32, v: f32) -> (f32, f32, f32) {
     (r1 + m, g1 + m, b1 + m)
 }
 
-// =========================================================================
-// LIGHTCRAFT COLOR SCIENCE: OkLab / OkLCh, 8-Band Partition, Calibration,
-// Parametric + Point Curves, 4-Way Color Grading, Grain & Vignette
-// =========================================================================
-#[inline]
-fn srgb_to_oklab(r: f32, g: f32, b: f32) -> [f32; 3] {
-    let rl = r.max(0.0);
-    let gl = g.max(0.0);
-    let bl = b.max(0.0);
-    let l = (0.41222146 * rl + 0.53633255 * gl + 0.051445995 * bl).cbrt();
-    let m = (0.2119035 * rl + 0.6806995 * gl + 0.10739696 * bl).cbrt();
-    let s = (0.08830246 * rl + 0.28171885 * gl + 0.6299787 * bl).cbrt();
-    [
-        0.21045426 * l + 0.7936178 * m - 0.004072047 * s,
-        1.9779985 * l - 2.4285922 * m + 0.4505937 * s,
-        0.025904037 * l + 0.78277177 * m - 0.80867577 * s,
-    ]
-}
-
-#[inline]
-fn oklab_to_srgb(lab: [f32; 3]) -> (f32, f32, f32) {
-    let [l_, a, b] = lab;
-    let l = (l_ + 0.39633778 * a + 0.21580376 * b).powi(3);
-    let m = (l_ - 0.105561346 * a - 0.06385417 * b).powi(3);
-    let s = (l_ - 0.08948418 * a - 1.2914855 * b).powi(3);
-    (
-        (4.0767417 * l - 3.3077116 * m + 0.23096994 * s).max(0.0),
-        (-1.268438 * l + 2.6097574 * m - 0.34131938 * s).max(0.0),
-        (-0.0041960863 * l - 0.7034186 * m + 1.7076147 * s).max(0.0),
-    )
-}
-
 #[inline]
 fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {
     if (e1 - e0).abs() < 1e-6 {
@@ -1382,112 +1355,6 @@ fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {
     }
     let t = ((x - e0) / (e1 - e0)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
-}
-
-const LC_HUE_CENTRES: [f32; 8] = [22.0, 52.0, 92.0, 142.0, 195.0, 250.0, 298.0, 342.0];
-
-#[inline]
-fn lc_band_weights(h_deg: f32) -> [f32; 8] {
-    let h = h_deg.rem_euclid(360.0);
-    let mut i0 = 7usize;
-    let mut i1 = 0usize;
-    for i in 0..8 {
-        let j = (i + 1) % 8;
-        let c0 = LC_HUE_CENTRES[i];
-        let c1 = if j == 0 { LC_HUE_CENTRES[0] + 360.0 } else { LC_HUE_CENTRES[j] };
-        let hh = if j == 0 && h < LC_HUE_CENTRES[0] { h + 360.0 } else { h };
-        if hh >= c0 && hh < c1 {
-            i0 = i;
-            i1 = j;
-            break;
-        }
-    }
-    let c0 = LC_HUE_CENTRES[i0];
-    let c1 = if i1 == 0 { LC_HUE_CENTRES[0] + 360.0 } else { LC_HUE_CENTRES[i1] };
-    let hh = if i1 == 0 && h < LC_HUE_CENTRES[0] { h + 360.0 } else { h };
-    let u = ((hh - c0) / (c1 - c0)).clamp(0.0, 1.0);
-    let w1 = 0.5 - 0.5 * (u * std::f32::consts::PI).cos();
-    let mut out = [0.0f32; 8];
-    out[i0] = 1.0 - w1;
-    out[i1] = w1;
-    out
-}
-
-fn build_calibration_matrix(params: &RetouchParams) -> Option<[[f32; 3]; 3]> {
-    let active = params.cal_red_hue.abs() > 0.2
-        || params.cal_red_sat.abs() > 0.2
-        || params.cal_green_hue.abs() > 0.2
-        || params.cal_green_sat.abs() > 0.2
-        || params.cal_blue_hue.abs() > 0.2
-        || params.cal_blue_sat.abs() > 0.2;
-    if !active {
-        return None;
-    }
-    let rh = params.cal_red_hue / 100.0 * 0.22;
-    let rs = 1.0 + params.cal_red_sat / 100.0 * 0.35;
-    let gh = params.cal_green_hue / 100.0 * 0.22;
-    let gs = 1.0 + params.cal_green_sat / 100.0 * 0.35;
-    let bh = params.cal_blue_hue / 100.0 * 0.22;
-    let bs = 1.0 + params.cal_blue_sat / 100.0 * 0.35;
-
-    let mut m = [
-        [rs, -gh * gs * 0.5, bh * bs * 0.5],
-        [rh * rs * 0.6, gs, -bh * bs * 0.6],
-        [-rh * rs * 0.4, gh * gs * 0.6, bs],
-    ];
-    for row in &mut m {
-        let sum: f32 = row.iter().sum();
-        if sum.abs() > 1e-5 {
-            for v in row.iter_mut() {
-                *v /= sum;
-            }
-        }
-    }
-    Some(m)
-}
-
-#[inline]
-fn eval_parametric_curve(x: f32, params: &RetouchParams) -> f32 {
-    if params.curve_shadows.abs() < 0.2
-        && params.curve_darks.abs() < 0.2
-        && params.curve_lights.abs() < 0.2
-        && params.curve_highlights.abs() < 0.2
-    {
-        return x;
-    }
-    let s0 = (params.curve_split_shadows / 100.0).clamp(0.08, 0.45);
-    let s1 = (params.curve_split_mid / 100.0).clamp(s0 + 0.08, 0.72);
-    let s2 = (params.curve_split_highlights / 100.0).clamp(s1 + 0.08, 0.92);
-
-    let bell = |c: f32, w: f32| -> f32 {
-        let d = ((x - c) / w).abs();
-        if d >= 1.0 {
-            0.0
-        } else {
-            let u = 1.0 - d * d;
-            u * u
-        }
-    };
-    let end_taper = (4.0 * x * (1.0 - x)).clamp(0.0, 1.0).sqrt();
-    let dy = (params.curve_shadows / 100.0) * 0.22 * bell(s0 * 0.55, s0 * 0.95)
-        + (params.curve_darks / 100.0) * 0.22 * bell((s0 + s1) * 0.5, (s1 - s0) * 1.1)
-        + (params.curve_lights / 100.0) * 0.22 * bell((s1 + s2) * 0.5, (s2 - s1) * 1.1)
-        + (params.curve_highlights / 100.0) * 0.22 * bell((s2 + 1.0) * 0.5, (1.0 - s2) * 0.95);
-    (x + dy * end_taper).clamp(0.0, 1.0)
-}
-
-#[inline]
-fn sample_curve_lut(lut: &[u8], v: f32) -> f32 {
-    if lut.len() != 256 {
-        return v;
-    }
-    let scaled = (v.clamp(0.0, 1.0) * 255.0).clamp(0.0, 255.0);
-    let i0 = scaled.floor() as usize;
-    let i1 = (i0 + 1).min(255);
-    let frac = scaled - i0 as f32;
-    let v0 = lut[i0] as f32 / 255.0;
-    let v1 = lut[i1] as f32 / 255.0;
-    v0 * (1.0 - frac) + v1 * frac
 }
 
 #[inline]
@@ -2782,12 +2649,33 @@ fn masked_background_bokeh(base_rgb: &[f32], fg_alpha: &[f32], w: usize, h: usiz
     let mut wg = vec![0.0f32; n];
     let mut wbl = vec![0.0f32; n];
 
-    for i in 0..n {
-        let weight = (1.0 - fg_alpha[i]).clamp(0.0, 1.0).powi(2);
-        wb[i] = weight;
-        wr[i] = base_rgb[i * 3] * weight;
-        wg[i] = base_rgb[i * 3 + 1] * weight;
-        wbl[i] = base_rgb[i * 3 + 2] * weight;
+    for y in 0..h {
+        let yp = (y + 2).min(h - 1);
+        let ym = y.saturating_sub(2);
+        for x in 0..w {
+            let xp = (x + 2).min(w - 1);
+            let xm = x.saturating_sub(2);
+            let i = y * w + x;
+            let ix_p = (y * w + xp) * 3;
+            let ix_m = (y * w + xm) * 3;
+            let iy_p = (yp * w + x) * 3;
+            let iy_m = (ym * w + x) * 3;
+            // Suppress sharp high-contrast flyaway strands / edges so un-masked wispy hairs do not darken bokeh into gray haze
+            let grad = ((base_rgb[ix_p] - base_rgb[ix_m]).abs()
+                + (base_rgb[ix_p + 1] - base_rgb[ix_m + 1]).abs()
+                + (base_rgb[ix_p + 2] - base_rgb[ix_m + 2]).abs()
+                + (base_rgb[iy_p] - base_rgb[iy_m]).abs()
+                + (base_rgb[iy_p + 1] - base_rgb[iy_m + 1]).abs()
+                + (base_rgb[iy_p + 2] - base_rgb[iy_m + 2]).abs())
+                * 0.5;
+            let smooth_k = 1.0 - smoothstep(0.035, 0.11, grad);
+            let base_w = (1.0 - fg_alpha[i]).clamp(0.0, 1.0).powi(3);
+            let weight = base_w * (0.04 + 0.96 * smooth_k);
+            wb[i] = weight;
+            wr[i] = base_rgb[i * 3] * weight;
+            wg[i] = base_rgb[i * 3 + 1] * weight;
+            wbl[i] = base_rgb[i * 3 + 2] * weight;
+        }
     }
 
     let r2 = (radius / 2).max(1);
@@ -3164,6 +3052,453 @@ fn adaptive_denoise_rgb(src: &[f32], w: usize, h: usize, strength: f32, detail: 
     out
 }
 
+/// Detect protruding wispy flyaway hairs & tangled clouds against background and recover uncontaminated local background color.
+#[inline]
+fn clean_stray_hair_bg(
+    base_rgb: &[f32],
+    blur_fine: &[f32],
+    blur_med: &[f32],
+    fg_alpha: &[f32],
+    w: usize,
+    h: usize,
+    x: usize,
+    y: usize,
+    r_inner: f32,
+    r_mid: f32,
+    r_far: f32,
+    stray_str: f32,
+    curr_r: f32,
+    curr_g: f32,
+    curr_b: f32,
+    bokeh_r: f32,
+    bokeh_g: f32,
+    bokeh_b: f32,
+) -> (f32, f32, f32, f32) {
+    const DIRS: [(f32, f32); 8] = [
+        (1.0, 0.0),
+        (0.70710677, 0.70710677),
+        (0.0, 1.0),
+        (-0.70710677, 0.70710677),
+        (-1.0, 0.0),
+        (-0.70710677, -0.70710677),
+        (0.0, -1.0),
+        (0.70710677, -0.70710677),
+    ];
+    // 22.5 deg staggered directions for mid ring
+    const DIRS_STAGGER: [(f32, f32); 8] = [
+        (0.9238795, 0.38268343),
+        (0.38268343, 0.9238795),
+        (-0.38268343, 0.9238795),
+        (-0.9238795, 0.38268343),
+        (-0.9238795, -0.38268343),
+        (-0.38268343, -0.9238795),
+        (0.38268343, -0.9238795),
+        (0.9238795, -0.38268343),
+    ];
+    let max_x = w.saturating_sub(1) as f32;
+    let max_y = h.saturating_sub(1) as f32;
+
+    // 3 concentric rings (24 taps): r_inner handles thin strands near wall, r_mid/r_far escape 50-90px shoulder puffs
+    // (clean_score, r, g, b, fg_a, hi_r, hi_g, hi_b, is_inner)
+    let mut taps = [(0.0f32, 0.0f32, 0.0f32, 0.0f32, 0.0f32, 0.0f32, 0.0f32, 0.0f32, true); 24];
+    for ring in 0..3 {
+        let radius = match ring {
+            0 => r_inner,
+            1 => r_mid,
+            _ => r_far,
+        };
+        let dirs = if ring == 1 { &DIRS_STAGGER } else { &DIRS };
+        let ring_bias = match ring {
+            0 => 0.0,
+            1 => 0.020,
+            _ => 0.045,
+        };
+        for (k, &(dx, dy)) in dirs.iter().enumerate() {
+            let sx = (x as f32 + dx * radius).round().clamp(0.0, max_x) as usize;
+            let sy = (y as f32 + dy * radius).round().clamp(0.0, max_y) as usize;
+            let s_idx = (sy * w + sx) * 3;
+            let sr = base_rgb[s_idx];
+            let sg = base_rgb[s_idx + 1];
+            let sb = base_rgb[s_idx + 2];
+            let fr = blur_fine[s_idx];
+            let fg_c = blur_fine[s_idx + 1];
+            let fb = blur_fine[s_idx + 2];
+            let mr = blur_med[s_idx];
+            let mg = blur_med[s_idx + 1];
+            let mb = blur_med[s_idx + 2];
+            let hi_r = sr - fr;
+            let hi_g = sg - fg_c;
+            let hi_b = sb - fb;
+            let edge_fine = hi_r.abs() + hi_g.abs() + hi_b.abs();
+            // Reject narrow 3px bright gaps sitting inside darkened crisscross hair puffs
+            let edge_med = (sr - mr).abs() + (sg - mg).abs() + (sb - mb).abs();
+            let t_fg = fg_alpha[sy * w + sx];
+            let dist_b = (sr - bokeh_r).abs() + (sg - bokeh_g).abs() + (sb - bokeh_b).abs();
+            let clean_score = t_fg * 1.15 + edge_fine * 2.0 + edge_med * 1.45 + dist_b * 0.08 + ring_bias;
+            taps[ring * 8 + k] = (clean_score, sr, sg, sb, t_fg, hi_r, hi_g, hi_b, ring == 0);
+        }
+    }
+    taps.sort_unstable_by(|a, b| a.0.total_cmp(&b.0));
+
+    // If even across wide rings all top background candidates sit inside solid foreground core, preserve hair mass
+    if taps[3].4 > 0.85 {
+        return (curr_r, curr_g, curr_b, 0.0);
+    }
+
+    // Consensus average anchored on the single cleanest smooth donor tap (blocks 1 outlier collar/shadow tap)
+    let mut sum_r = taps[0].1;
+    let mut sum_g = taps[0].2;
+    let mut sum_b = taps[0].3;
+    let mut sum_n = 1.0f32;
+    for t in &taps[1..6] {
+        let d0 = (t.1 - taps[0].1).abs() + (t.2 - taps[0].2).abs() + (t.3 - taps[0].3).abs();
+        if d0 < 0.095 {
+            sum_r += t.1;
+            sum_g += t.2;
+            sum_b += t.3;
+            sum_n += 1.0;
+        }
+    }
+    let bg_r = sum_r / sum_n;
+    let bg_g = sum_g / sum_n;
+    let bg_b = sum_b / sum_n;
+
+    let mut clean_bg_count = 0u32;
+    let mut inner_mass = 0.0f32;
+    for t in &taps {
+        let d = (t.1 - bg_r).abs() + (t.2 - bg_g).abs() + (t.3 - bg_b).abs();
+        if d < 0.095 && t.4 < 0.68 {
+            clean_bg_count += 1;
+        }
+        if t.8 && d > 0.12 {
+            if t.4 > 0.88 {
+                inner_mass += 1.0;
+            } else if t.4 > 0.68 {
+                inner_mass += 0.55;
+            } else if t.4 > 0.50 {
+                inner_mass += 0.25;
+            }
+        }
+    }
+
+    // Distinguish solid thick hair locks / black clothing (dense on BOTH r_inner and blur_med) from wide sparse wispy puffs
+    let px_idx = (y * w + x) * 3;
+    let med_dev = (blur_med[px_idx] - bg_r).abs()
+        + (blur_med[px_idx + 1] - bg_g).abs()
+        + (blur_med[px_idx + 2] - bg_b).abs();
+    let dev = (curr_r - bg_r).abs() + (curr_g - bg_g).abs() + (curr_b - bg_b).abs();
+    let med_ratio = med_dev / dev.max(0.18);
+
+    let max_mass = 2.8 + stray_str * 1.2;
+    let core_block = smoothstep(max_mass, max_mass + 1.1, inner_mass) * smoothstep(0.30, 0.48, med_ratio);
+    let dense_guard = 1.0 - core_block;
+    let strand_w = smoothstep(0.016, 0.064, dev) * dense_guard * smoothstep(2.0, 5.0, clean_bg_count as f32);
+
+    // Reintroduce subtle background sensor grain from the cleanest donor tap so healed area blends seamlessly
+    let tex_r = (bg_r + (taps[0].5 * 0.45).clamp(-0.02, 0.02)).clamp(0.0, 1.0);
+    let tex_g = (bg_g + (taps[0].6 * 0.45).clamp(-0.02, 0.02)).clamp(0.0, 1.0);
+    let tex_b = (bg_b + (taps[0].7 * 0.45).clamp(-0.02, 0.02)).clamp(0.0, 1.0);
+    (tex_r, tex_g, tex_b, strand_w)
+}
+
+/// Remove thin isolated stray hairs over upper forehead while keeping dense bangs intact.
+#[inline]
+fn heal_forehead_flyaway(
+    base_rgb: &[f32],
+    w: usize,
+    h: usize,
+    x: usize,
+    y: usize,
+    r_ring: f32,
+    curr_lum: f32,
+) -> (f32, f32, f32, f32) {
+    const DIRS: [(f32, f32); 8] = [
+        (1.0, 0.0),
+        (0.70710677, 0.70710677),
+        (0.0, 1.0),
+        (-0.70710677, 0.70710677),
+        (-1.0, 0.0),
+        (-0.70710677, -0.70710677),
+        (0.0, -1.0),
+        (0.70710677, -0.70710677),
+    ];
+    let max_x = w.saturating_sub(1) as f32;
+    let max_y = h.saturating_sub(1) as f32;
+    let mut taps = [(0.0f32, 0.0f32, 0.0f32, 0.0f32); 8];
+    let mut skin_taps = 0u32;
+    for (k, &(dx, dy)) in DIRS.iter().enumerate() {
+        let sx = (x as f32 + dx * r_ring).round().clamp(0.0, max_x) as usize;
+        let sy = (y as f32 + dy * r_ring).round().clamp(0.0, max_y) as usize;
+        let s_idx = (sy * w + sx) * 3;
+        let sr = base_rgb[s_idx];
+        let sg = base_rgb[s_idx + 1];
+        let sb = base_rgb[s_idx + 2];
+        let sl = 0.299 * sr + 0.587 * sg + 0.114 * sb;
+        if skin_weight(sr, sg, sb) > 0.38 && sl > curr_lum + 0.065 {
+            skin_taps += 1;
+        }
+        taps[k] = (sl, sr, sg, sb);
+    }
+    if skin_taps < 6 {
+        return (0.0, 0.0, 0.0, 0.0);
+    }
+    taps.sort_unstable_by(|a, b| a.0.total_cmp(&b.0));
+    let sk_r = (taps[4].1 + taps[5].1 + taps[6].1) / 3.0;
+    let sk_g = (taps[4].2 + taps[5].2 + taps[6].2) / 3.0;
+    let sk_b = (taps[4].3 + taps[5].3 + taps[6].3) / 3.0;
+    let sk_lum = 0.299 * sk_r + 0.587 * sk_g + 0.114 * sk_b;
+    let weight = smoothstep(0.065, 0.18, sk_lum - curr_lum);
+    (sk_r, sk_g, sk_b, weight)
+}
+
+/// Fill exposed bright scalp gaps along a narrow hair part line using adjacent hair tone & texture.
+#[inline]
+fn fill_hair_part_line(
+    base_rgb: &[f32],
+    blur_fine: &[f32],
+    w: usize,
+    h: usize,
+    x: usize,
+    y: usize,
+    r_part: f32,
+    curr_lum: f32,
+) -> (f32, f32, f32, f32) {
+    const DIRS: [(f32, f32); 8] = [
+        (1.0, 0.0),
+        (0.70710677, 0.70710677),
+        (0.0, 1.0),
+        (-0.70710677, 0.70710677),
+        (-1.0, 0.0),
+        (-0.70710677, -0.70710677),
+        (0.0, -1.0),
+        (0.70710677, -0.70710677),
+    ];
+    let max_x = w.saturating_sub(1) as f32;
+    let max_y = h.saturating_sub(1) as f32;
+    let mut taps = [(0.0f32, 0.0f32, 0.0f32, 0.0f32, 0.0f32, 0.0f32, 0.0f32); 8];
+    let mut darker_taps = 0u32;
+    for (k, &(dx, dy)) in DIRS.iter().enumerate() {
+        let sx = (x as f32 + dx * r_part).round().clamp(0.0, max_x) as usize;
+        let sy = (y as f32 + dy * r_part).round().clamp(0.0, max_y) as usize;
+        let s_idx = (sy * w + sx) * 3;
+        let sr = base_rgb[s_idx];
+        let sg = base_rgb[s_idx + 1];
+        let sb = base_rgb[s_idx + 2];
+        let fr = blur_fine[s_idx];
+        let fg = blur_fine[s_idx + 1];
+        let fb = blur_fine[s_idx + 2];
+        let sl = 0.299 * sr + 0.587 * sg + 0.114 * sb;
+        if sl < curr_lum - 0.045 {
+            darker_taps += 1;
+        }
+        taps[k] = (sl, sr, sg, sb, sr - fr, sg - fg, sb - fb);
+    }
+    if darker_taps < 5 {
+        return (0.0, 0.0, 0.0, 0.0);
+    }
+    taps.sort_unstable_by(|a, b| a.0.total_cmp(&b.0));
+    let dark_r = (taps[1].1 + taps[2].1 + taps[3].1) / 3.0;
+    let dark_g = (taps[1].2 + taps[2].2 + taps[3].2) / 3.0;
+    let dark_b = (taps[1].3 + taps[2].3 + taps[3].3) / 3.0;
+    let dark_lum = 0.299 * dark_r + 0.587 * dark_g + 0.114 * dark_b;
+    let donor = taps[2];
+    let out_r = (dark_r + (donor.4 * 0.45).clamp(-0.04, 0.04)).clamp(0.0, 1.0);
+    let out_g = (dark_g + (donor.5 * 0.45).clamp(-0.04, 0.04)).clamp(0.0, 1.0);
+    let out_b = (dark_b + (donor.6 * 0.45).clamp(-0.04, 0.04)).clamp(0.0, 1.0);
+    let weight = smoothstep(0.045, 0.18, curr_lum - dark_lum) * smoothstep(4.0, 6.5, darker_taps as f32);
+    (out_r, out_g, out_b, weight)
+}
+
+struct CleanRingEstimate {
+    clean_r: f32,
+    clean_g: f32,
+    clean_b: f32,
+    clean_lum: f32,
+    dark_iso: f32,
+    red_iso: f32,
+}
+
+#[derive(Clone, Copy)]
+struct RingEval {
+    clean_r: f32,
+    clean_g: f32,
+    clean_b: f32,
+    clean_lum: f32,
+    dark_dirs: u32,
+    red_dirs: u32,
+    dark_crease: bool,
+    red_crease: bool,
+}
+
+/// Evaluate 8 evenly-spaced compass taps at `radius` (rotated by `angle_shift` radians) around `(x, y)`
+/// for dark-spot isolation, red-pimple isolation, 1D crease rejection, and unbiased local clean tone.
+#[inline]
+fn eval_spot_ring(
+    base_rgb: &[f32],
+    blur_fine: &[f32],
+    w: usize,
+    h: usize,
+    x: usize,
+    y: usize,
+    radius: f32,
+    angle_shift: f32,
+    curr_lum: f32,
+    curr_rg: f32,
+) -> RingEval {
+    const DIRS: [(f32, f32); 8] = [
+        (1.0, 0.0),
+        (0.70710677, 0.70710677),
+        (0.0, 1.0),
+        (-0.70710677, 0.70710677),
+        (-1.0, 0.0),
+        (-0.70710677, -0.70710677),
+        (0.0, -1.0),
+        (0.70710677, -0.70710677),
+    ];
+
+    let max_x = w.saturating_sub(1) as f32;
+    let max_y = h.saturating_sub(1) as f32;
+    let cos_s = angle_shift.cos();
+    let sin_s = angle_shift.sin();
+
+    // Per-direction flags for opposing-pair crease checks
+    let mut is_brighter = [false; 8];
+    let mut is_less_red = [false; 8];
+    let mut dark_dirs = 0u32;
+    let mut red_dirs = 0u32;
+
+    // (cleanliness_score, sr, sg, sb, pore_r, pore_g, pore_b)
+    let mut taps = [(0.0f32, 0.0f32, 0.0f32, 0.0f32, 0.0f32, 0.0f32, 0.0f32); 8];
+
+    for (k, &(dx, dy)) in DIRS.iter().enumerate() {
+        let rx = dx * cos_s - dy * sin_s;
+        let ry = dx * sin_s + dy * cos_s;
+        let sx = (x as f32 + rx * radius).round().clamp(0.0, max_x) as usize;
+        let sy = (y as f32 + ry * radius).round().clamp(0.0, max_y) as usize;
+        let s_idx = (sy * w + sx) * 3;
+        let sr = base_rgb[s_idx];
+        let sg = base_rgb[s_idx + 1];
+        let sb = base_rgb[s_idx + 2];
+        let fr = blur_fine[s_idx];
+        let fg = blur_fine[s_idx + 1];
+        let fb = blur_fine[s_idx + 2];
+
+        let sl = 0.299 * sr + 0.587 * sg + 0.114 * sb;
+        let s_rg = sr - sg;
+        let score = sl - 0.25 * s_rg;
+
+        if sl > curr_lum + 0.012 {
+            is_brighter[k] = true;
+            dark_dirs += 1;
+        }
+        if s_rg < curr_rg - 0.012 {
+            is_less_red[k] = true;
+            red_dirs += 1;
+        }
+
+        let pr = ((sr - fr) * 0.55).clamp(-0.040, 0.040);
+        let pg = ((sg - fg) * 0.55).clamp(-0.040, 0.040);
+        let pb = ((sb - fb) * 0.55).clamp(-0.040, 0.040);
+        taps[k] = (score, sr, sg, sb, pr, pg, pb);
+    }
+
+    let mut d_both_clean = 0u32;
+    let mut d_both_dark = 0u32;
+    let mut r_both_clean = 0u32;
+    let mut r_both_red = 0u32;
+    for k in 0..4 {
+        if is_brighter[k] && is_brighter[k + 4] {
+            d_both_clean += 1;
+        } else if !is_brighter[k] && !is_brighter[k + 4] {
+            d_both_dark += 1;
+        }
+        if is_less_red[k] && is_less_red[k + 4] {
+            r_both_clean += 1;
+        } else if !is_less_red[k] && !is_less_red[k + 4] {
+            r_both_red += 1;
+        }
+    }
+
+    taps.sort_unstable_by(|a, b| a.0.total_cmp(&b.0));
+
+    // Average trimmed middle 4 samples [2..6]: unbiased local skin tone without bright drift
+    // and excluding up to 2 darker spot/shadow samples [0..2] + top 2 highlight outliers [6..8].
+    let clean_base_r = (taps[2].1 + taps[3].1 + taps[4].1 + taps[5].1) * 0.25;
+    let clean_base_g = (taps[2].2 + taps[3].2 + taps[4].2 + taps[5].2) * 0.25;
+    let clean_base_b = (taps[2].3 + taps[3].3 + taps[4].3 + taps[5].3) * 0.25;
+    let clean_lum = 0.299 * clean_base_r + 0.587 * clean_base_g + 0.114 * clean_base_b;
+
+    let donor = taps[4];
+    RingEval {
+        clean_r: (clean_base_r + donor.4).clamp(0.0, 1.0),
+        clean_g: (clean_base_g + donor.5).clamp(0.0, 1.0),
+        clean_b: (clean_base_b + donor.6).clamp(0.0, 1.0),
+        clean_lum,
+        dark_dirs,
+        red_dirs,
+        dark_crease: d_both_dark == 1 && d_both_clean >= 2,
+        red_crease: r_both_red == 1 && r_both_clean >= 2,
+    }
+}
+
+#[inline]
+fn dirs_to_iso(dirs: u32, is_crease: bool) -> f32 {
+    if is_crease || dirs < 7 {
+        0.0
+    } else if dirs == 7 {
+        0.82
+    } else {
+        1.0
+    }
+}
+
+/// Dual-scale closed-contour spot detector: tries tight local skin first (~3.5-7.5px)
+/// and falls back to wider enclosing skin (~7.5-15px) only when inside a larger mole/acne,
+/// rejecting 1D creases, lip lines, nostril folds, and half-plane facial shadows.
+#[inline]
+fn detect_clean_spot_ring(
+    base_rgb: &[f32],
+    blur_fine: &[f32],
+    w: usize,
+    h: usize,
+    x: usize,
+    y: usize,
+    r_tight: f32,
+    r_wide: f32,
+    curr_lum: f32,
+    curr_rg: f32,
+) -> CleanRingEstimate {
+    let tight = eval_spot_ring(base_rgb, blur_fine, w, h, x, y, r_tight, 0.0, curr_lum, curr_rg);
+    let wide = eval_spot_ring(base_rgb, blur_fine, w, h, x, y, r_wide, 0.3926991, curr_lum, curr_rg);
+
+    // A 1D crease at `tight` scale cannot be rescued by jumping past its ends at `wide` scale
+    let dark_crease = tight.dark_crease || wide.dark_crease;
+    let red_crease = tight.red_crease || wide.red_crease;
+
+    let tight_dark_iso = dirs_to_iso(tight.dark_dirs, dark_crease);
+    let wide_dark_iso = dirs_to_iso(wide.dark_dirs, dark_crease);
+    let tight_red_iso = dirs_to_iso(tight.red_dirs, red_crease);
+    let wide_red_iso = dirs_to_iso(wide.red_dirs, red_crease);
+
+    let tight_best = tight_dark_iso.max(tight_red_iso);
+    let wide_best = wide_dark_iso.max(wide_red_iso);
+    // Prefer tight surrounding skin when tight clears the spot to preserve natural facial shading
+    let chosen = if tight_best > 0.0 && tight_best >= wide_best * 0.85 {
+        tight
+    } else {
+        wide
+    };
+
+    CleanRingEstimate {
+        clean_r: chosen.clean_r,
+        clean_g: chosen.clean_g,
+        clean_b: chosen.clean_b,
+        clean_lum: chosen.clean_lum,
+        dark_iso: tight_dark_iso.max(wide_dark_iso),
+        red_iso: tight_red_iso.max(wide_red_iso),
+    }
+}
+
 pub fn apply_retouch_pipeline(
     img: &RgbaImage,
     params: &RetouchParams,
@@ -3200,7 +3535,7 @@ pub fn apply_retouch_pipeline_with_scene(
             }
         });
 
-    // Interactive Manual Spot Healing (in original image coordinates)
+    // Interactive Manual Spot Healing (directional gradient interpolation + clean pore texture synthesis)
     if !params.blemish_spots.is_empty() {
         let snapshot = base_rgb.clone();
         for spot in &params.blemish_spots {
@@ -3212,22 +3547,38 @@ pub fn apply_retouch_pipeline_with_scene(
             let y0 = ((cy - rad).floor().max(0.0)) as usize;
             let y1 = ((cy + rad).ceil().min((h - 1) as f32)) as usize;
 
-            let mut ring_r = 0.0f32;
-            let mut ring_g = 0.0f32;
-            let mut ring_b = 0.0f32;
-            let samples = 16;
-            for i in 0..samples {
-                let angle = (i as f32 / samples as f32) * std::f32::consts::TAU;
-                let sx = cx + angle.cos() * (rad * 1.35);
-                let sy = cy + angle.sin() * (rad * 1.35);
-                let (sr, sg, sb) = sample_bilinear(&snapshot, w, h, sx, sy);
-                ring_r += sr;
-                ring_g += sg;
-                ring_b += sb;
+            const RING_N: usize = 16;
+            let mut ring = [(0.0f32, 0.0f32, 0.0f32); RING_N];
+            let mut ring_mean = (0.0f32, 0.0f32, 0.0f32);
+            for i in 0..RING_N {
+                let angle = (i as f32 / RING_N as f32) * std::f32::consts::TAU;
+                let sx = cx + angle.cos() * (rad * 1.28);
+                let sy = cy + angle.sin() * (rad * 1.28);
+                let c = sample_bilinear(&snapshot, w, h, sx, sy);
+                ring[i] = c;
+                ring_mean.0 += c.0;
+                ring_mean.1 += c.1;
+                ring_mean.2 += c.2;
             }
-            ring_r /= samples as f32;
-            ring_g /= samples as f32;
-            ring_b /= samples as f32;
+            ring_mean.0 /= RING_N as f32;
+            ring_mean.1 /= RING_N as f32;
+            ring_mean.2 /= RING_N as f32;
+
+            // Pick a clean outer skin ring offset to transplant natural skin grain/pores
+            let mut donor_dx = rad * 1.35;
+            let mut donor_dy = 0.0f32;
+            let mut best_clean_score = f32::NEG_INFINITY;
+            for i in 0..RING_N {
+                let (rr, rg, rb) = ring[i];
+                let lum = 0.299 * rr + 0.587 * rg + 0.114 * rb;
+                let score = -(lum - (0.299 * ring_mean.0 + 0.587 * ring_mean.1 + 0.114 * ring_mean.2)).abs();
+                if score > best_clean_score {
+                    best_clean_score = score;
+                    let angle = (i as f32 / RING_N as f32) * std::f32::consts::TAU;
+                    donor_dx = angle.cos() * (rad * 1.35);
+                    donor_dy = angle.sin() * (rad * 1.35);
+                }
+            }
 
             for y in y0..=y1 {
                 for x in x0..=x1 {
@@ -3235,11 +3586,48 @@ pub fn apply_retouch_pipeline_with_scene(
                     let dy = y as f32 - cy;
                     let dist = (dx * dx + dy * dy).sqrt();
                     if dist < rad {
-                        let t = (1.0 - (dist / rad).powi(2)).clamp(0.0, 1.0);
+                        // Directional boundary-weighted interpolation preserves cheek/forehead gradients
+                        let mut w_sum = 0.0f32;
+                        let mut interp = (0.0f32, 0.0f32, 0.0f32);
+                        for i in 0..RING_N {
+                            let angle = (i as f32 / RING_N as f32) * std::f32::consts::TAU;
+                            let bx = angle.cos() * rad;
+                            let by = angle.sin() * rad;
+                            let d2 = (dx - bx) * (dx - bx) + (dy - by) * (dy - by) + 1.0;
+                            let wt = 1.0 / d2;
+                            interp.0 += ring[i].0 * wt;
+                            interp.1 += ring[i].1 * wt;
+                            interp.2 += ring[i].2 * wt;
+                            w_sum += wt;
+                        }
+                        interp.0 /= w_sum;
+                        interp.1 /= w_sum;
+                        interp.2 /= w_sum;
+
+                        // Transplant subtle high-frequency pore detail from clean skin donor
+                        let tx = (x as f32 + donor_dx).clamp(0.0, (w - 1) as f32);
+                        let ty = (y as f32 + donor_dy).clamp(0.0, (h - 1) as f32);
+                        let donor_px = sample_bilinear(&snapshot, w, h, tx, ty);
+                        let donor_local = sample_bilinear(&snapshot, w, h, cx + donor_dx, cy + donor_dy);
+                        let tex_r = ((donor_px.0 - donor_local.0) * 0.65).clamp(-0.05, 0.05);
+                        let tex_g = ((donor_px.1 - donor_local.1) * 0.65).clamp(-0.05, 0.05);
+                        let tex_b = ((donor_px.2 - donor_local.2) * 0.65).clamp(-0.05, 0.05);
+
+                        // Full 1.0 replacement across inner core (<= 0.55 * rad), feathered smoothly to edge
+                        let norm_d = (dist / rad).clamp(0.0, 1.0);
+                        let t = if norm_d <= 0.55 {
+                            1.0
+                        } else {
+                            let u = (norm_d - 0.55) / 0.45;
+                            1.0 - (u * u * (3.0 - 2.0 * u))
+                        };
                         let idx = (y * w + x) * 3;
-                        base_rgb[idx] = base_rgb[idx] * (1.0 - t) + ring_r * t;
-                        base_rgb[idx + 1] = base_rgb[idx + 1] * (1.0 - t) + ring_g * t;
-                        base_rgb[idx + 2] = base_rgb[idx + 2] * (1.0 - t) + ring_b * t;
+                        let target_r = (interp.0 + tex_r).clamp(0.0, 1.0);
+                        let target_g = (interp.1 + tex_g).clamp(0.0, 1.0);
+                        let target_b = (interp.2 + tex_b).clamp(0.0, 1.0);
+                        base_rgb[idx] = base_rgb[idx] * (1.0 - t) + target_r * t;
+                        base_rgb[idx + 1] = base_rgb[idx + 1] * (1.0 - t) + target_g * t;
+                        base_rgb[idx + 2] = base_rgb[idx + 2] * (1.0 - t) + target_b * t;
                     }
                 }
             }
@@ -3532,39 +3920,109 @@ pub fn apply_retouch_pipeline_with_scene(
                     let lum_fine = 0.299 * rf + 0.587 * gf + 0.114 * bf;
                     let lum_med = 0.299 * rm + 0.587 * gm + 0.114 * bm;
 
-                    // Local edge guard so structural boundaries (jaw shadow, nose edge) are not flattened
-                    let med_diff = ((rf - rm).abs() + (gf - gm).abs() + (bf - bm).abs()) / 3.0;
-                    let local_flatness = (1.0 - (med_diff / 0.16)).clamp(0.15, 1.0);
-
-                    // 1a. Freckles & Acne (Face only): targets localized reddish/warm spots & small pigment dips
-                    if freckle_acne_str > 0.005 && face_skin_w > 0.01 {
-                        let spot_dip = (lum_med - lum_fine).clamp(0.0, 0.12);
-                        let red_spot = ((rf - gf) - (rm - gm)).clamp(0.0, 0.12);
-                        let heal_a = ((spot_dip * 7.5 + red_spot * 6.5) * freckle_acne_str * face_skin_w * local_flatness).clamp(0.0, 0.92);
-                        r = r * (1.0 - heal_a) + (rm + high_r * 0.45) * heal_a;
-                        g = g * (1.0 - heal_a) + (gm + high_g * 0.45) * heal_a;
-                        b = b * (1.0 - heal_a) + (bm + high_b * 0.45) * heal_a;
-                    }
-
-                    // 1b. Face Moles: targets compact dark spots (lum_curr significantly darker than lum_med)
-                    if face_mole_str > 0.005 && face_skin_w > 0.01 {
-                        let mole_dip = (lum_med - lum_curr).clamp(0.0, 0.22);
-                        if mole_dip > 0.025 {
-                            let mole_a = ((mole_dip - 0.02) * 8.5 * face_mole_str * face_skin_w * local_flatness).clamp(0.0, 0.94);
-                            r = r * (1.0 - mole_a) + (rm + high_r * 0.30) * mole_a;
-                            g = g * (1.0 - mole_a) + (gm + high_g * 0.30) * mole_a;
-                            b = b * (1.0 - mole_a) + (bm + high_b * 0.30) * mole_a;
+                    // Protect eyes, eyebrows, lips, teeth, hair and nostrils from blemish removal
+                    let feature_protect = (1.0
+                        - (sem.eye * 1.8
+                            + sem.eyebrow * 1.8
+                            + sem.lips_outer * 1.5
+                            + sem.teeth_inner * 1.8
+                            + sem.hair * 1.2))
+                        .clamp(0.0, 1.0);
+                    let nostril_guard = if face.face_rx > 0.01 {
+                        let ndx = (nx - face.nose_x) / (face.face_rx * 0.30).max(0.015);
+                        let ndy = (ny - (face.nose_y + face.face_ry * 0.035))
+                            / (face.face_ry * 0.12).max(0.010);
+                        let nd2 = ndx * ndx + ndy * ndy;
+                        if nd2 < 1.0 {
+                            (nd2 * nd2).clamp(0.0, 1.0)
+                        } else {
+                            1.0
                         }
-                    }
+                    } else {
+                        1.0
+                    };
+                    // Strictly zero out healing along carved-out nostrils, eyelids, lashes, brows, and lips
+                    let strict_face_gate = ((sem.skin - 0.58) / 0.34).clamp(0.0, 1.0)
+                        * (1.0 - is_body_zone)
+                        * feature_protect
+                        * nostril_guard;
 
-                    // 1c. Body Blemishes (Neck & Body skin only!)
-                    if body_blemish_str > 0.005 && body_skin_w > 0.01 {
-                        let b_dip = (lum_med - lum_curr).clamp(0.0, 0.15);
-                        let b_red = ((r - g) - (rm - gm)).clamp(0.0, 0.12);
-                        let body_a = ((b_dip * 8.0 + b_red * 6.5) * body_blemish_str * body_skin_w).clamp(0.0, 0.92);
-                        r = r * (1.0 - body_a) + (rm + high_r * 0.40) * body_a;
-                        g = g * (1.0 - body_a) + (gm + high_g * 0.40) * body_a;
-                        b = b * (1.0 - body_a) + (bm + high_b * 0.40) * body_a;
+                    // 1a-1c. Freckles, Acne, Face Moles & Body Blemishes via Closed-Contour Spot Ring
+                    let need_face_blemish = (freckle_acne_str > 0.005 || face_mole_str > 0.005)
+                        && strict_face_gate > 0.01;
+                    let need_body_blemish = body_blemish_str > 0.005 && body_skin_w > 0.01;
+                    if need_face_blemish || need_body_blemish {
+                        let curr_rg = r - g;
+                        let red_diff = (curr_rg - (rm - gm)).max((rf - gf) - (rm - gm));
+                        let maybe_spot = (lum_med - lum_curr) > 0.012
+                            || (lum_med - lum_fine) > 0.010
+                            || red_diff > 0.014;
+
+                        if maybe_spot {
+                            let min_dim = w.min(h) as f32;
+                            let r_tight = (min_dim * 0.0045).clamp(4.0, 7.5);
+                            let r_wide = (min_dim * 0.0085).clamp(9.0, 14.5);
+                            let ring = detect_clean_spot_ring(
+                                &base_rgb,
+                                &blur_fine,
+                                w,
+                                h,
+                                x,
+                                y,
+                                r_tight,
+                                r_wide,
+                                lum_curr,
+                                curr_rg,
+                            );
+
+                            let dark_dip = (ring.clean_lum - lum_curr).clamp(0.0, 0.55);
+                            let red_excess =
+                                (curr_rg - (ring.clean_r - ring.clean_g)).clamp(0.0, 0.30);
+
+                            // 1a. Freckles & Acne (Face only): compact freckles & red pimples
+                            if freckle_acne_str > 0.005 && strict_face_gate > 0.01 {
+                                let dark_strength = ((dark_dip - 0.016) / 0.065).clamp(0.0, 1.0)
+                                    * ring.dark_iso;
+                                let red_strength = ((red_excess - 0.018) / 0.065).clamp(0.0, 1.0)
+                                    * ring.red_iso;
+                                let spot_strength = dark_strength.max(red_strength);
+                                let heal_a = (spot_strength * freckle_acne_str * 1.12).clamp(0.0, 0.96)
+                                    * strict_face_gate;
+                                r = r * (1.0 - heal_a) + ring.clean_r * heal_a;
+                                g = g * (1.0 - heal_a) + ring.clean_g * heal_a;
+                                b = b * (1.0 - heal_a) + ring.clean_b * heal_a;
+                            }
+
+                            // 1b. Face Moles: compact dark pigmented spots & smooth feathered border
+                            if face_mole_str > 0.005
+                                && strict_face_gate > 0.01
+                                && dark_dip > 0.022
+                                && ring.dark_iso > 0.0
+                            {
+                                let mole_core = ((dark_dip - 0.022) / 0.075).clamp(0.0, 1.0);
+                                let mole_a = (mole_core * ring.dark_iso * face_mole_str * 1.15)
+                                    .clamp(0.0, 0.98)
+                                    * strict_face_gate;
+                                r = r * (1.0 - mole_a) + ring.clean_r * mole_a;
+                                g = g * (1.0 - mole_a) + ring.clean_g * mole_a;
+                                b = b * (1.0 - mole_a) + ring.clean_b * mole_a;
+                            }
+
+                            // 1c. Body Blemishes (Neck & Body skin only!)
+                            if body_blemish_str > 0.005 && body_skin_w > 0.01 {
+                                let strict_body_gate = ((body_skin_w - 0.25) / 0.55).clamp(0.0, 1.0);
+                                let b_dark = ((dark_dip - 0.018) / 0.065).clamp(0.0, 1.0)
+                                    * ring.dark_iso;
+                                let b_red = ((red_excess - 0.018) / 0.065).clamp(0.0, 1.0)
+                                    * ring.red_iso;
+                                let body_a = (b_dark.max(b_red) * body_blemish_str * 1.10)
+                                    .clamp(0.0, 0.94)
+                                    * strict_body_gate;
+                                r = r * (1.0 - body_a) + ring.clean_r * body_a;
+                                g = g * (1.0 - body_a) + ring.clean_g * body_a;
+                                b = b * (1.0 - body_a) + ring.clean_b * body_a;
+                            }
+                        }
                     }
 
                     // 1d. Forehead Wrinkles (Strictly inside Forehead Polygon sem.forehead!)
@@ -3624,6 +4082,10 @@ pub fn apply_retouch_pipeline_with_scene(
                         g = low_g + high_g * active_pore;
                         b = low_b + high_b * active_pore;
                     }
+
+                    // Local edge guard so skin smoothing does not flatten structural boundaries
+                    let med_diff = ((rf - rm).abs() + (gf - gm).abs() + (bf - bm).abs()) / 3.0;
+                    let local_flatness = (1.0 - (med_diff / 0.16)).clamp(0.15, 1.0);
 
                     // 2b. Facial Skin Smooth (Dedicated Face-only bilateral-like smoothing)
                     if facial_smooth_str > 0.005 && face_skin_w > 0.01 {
@@ -3890,18 +4352,76 @@ pub fn apply_retouch_pipeline_with_scene(
                 // =========================================================
                 // 7. HAIR, CLOTHING & STUDIO BACKDROP (Neural 6-Class Masks!)
                 // =========================================================
-                // 7a. Hair Shine & Hair Dye (Strictly sem.hair!)
-                if sem.hair > 0.02 {
+                // 7a. Hair Part Line Thickening, Hair Shine & Hair Dye (Strictly protected from skin/ears)
+                let part_band = face.face_ry > 0.01
+                    && ny >= (face.forehead_y - face.face_ry * 0.65).max(0.01)
+                    && ny <= (face.forehead_y + face.face_ry * 0.06)
+                    && (nx - face.center_x).abs() <= face.face_rx * 0.78
+                    && sem.eyebrow < 0.05
+                    && sem.eye < 0.05
+                    && sem.background < 0.45;
+                if params.hair_part_line > 0.5 && part_band {
+                    let lum_curr = 0.299 * r + 0.587 * g + 0.114 * b;
+                    let r_part = (w.min(h) as f32 * 0.0085).clamp(5.0, 12.0);
+                    let (pr, pg, pb, pw) =
+                        fill_hair_part_line(&base_rgb, &blur_fine, w, h, x, y, r_part, lum_curr);
+                    if pw > 0.01 {
+                        let pa = (pw * (params.hair_part_line / 100.0) * 0.88).clamp(0.0, 0.90);
+                        r = r * (1.0 - pa) + pr * pa;
+                        g = g * (1.0 - pa) + pg * pa;
+                        b = b * (1.0 - pa) + pb * pa;
+                    }
+                }
+
+                // Forehead thin isolated baby-hair cleanup when stray_hair > 0 (never touches dense bangs/brows)
+                if !is_replacing
+                    && params.stray_hair > 0.5
+                    && sem.forehead > 0.45
+                    && sem.eyebrow < 0.02
+                    && sem.eye < 0.02
+                    && ny < face.forehead_y + face.face_ry * 0.16
+                {
+                    let lum_curr = 0.299 * r + 0.587 * g + 0.114 * b;
+                    let r_fh = (w.min(h) as f32 * 0.0065).clamp(4.0, 9.0);
+                    let (sr, sg, sb, sw_fh) =
+                        heal_forehead_flyaway(&base_rgb, w, h, x, y, r_fh, lum_curr);
+                    if sw_fh > 0.01 {
+                        let fh_str = (params.stray_hair / 100.0).clamp(0.0, 1.0);
+                        let fh_opacity = (0.35 + 0.60 * smoothstep(0.02, 0.32, fh_str)).clamp(0.0, 0.95);
+                        let fa = (sw_fh * fh_opacity).clamp(0.0, 0.95);
+                        r = r * (1.0 - fa) + sr * fa;
+                        g = g * (1.0 - fa) + sg * fa;
+                        b = b * (1.0 - fa) + sb * fa;
+                    }
+                }
+
+                let hair_skin_guard = skin_weight(r, g, b);
+                let hair_core_gate = ((sem.hair - 0.16) / 0.56).clamp(0.0, 1.0)
+                    * (1.0 - sem.skin * 1.4).clamp(0.0, 1.0)
+                    * (1.0 - hair_skin_guard * 1.35).clamp(0.0, 1.0)
+                    * (1.0 - sem.background * 0.88).clamp(0.0, 1.0);
+                if hair_core_gate > 0.01 {
                     if params.hair_shine > 0.5 {
+                        let shine_str = (params.hair_shine / 100.0).clamp(0.0, 1.0);
                         let lum = 0.299 * r + 0.587 * g + 0.114 * b;
-                        let sheen = ((lum - 0.12).max(0.0) * (0.82 - lum).max(0.0) * 5.8).clamp(0.0, 1.0);
-                        let add = sem.hair * sheen * (params.hair_shine / 100.0) * 0.30;
-                        r += add + high_r * sem.hair * 0.25;
-                        g += add + high_g * sem.hair * 0.25;
-                        b += add + high_b * sem.hair * 0.25;
+                        let lum_m = 0.299 * rm + 0.587 * gm + 0.114 * bm;
+                        let strand_sheen = ((lum - lum_m) * 4.5).clamp(0.0, 1.0);
+                        let silk_band =
+                            smoothstep(0.03, 0.22, lum) * (1.0 - smoothstep(0.55, 0.86, lum));
+                        let shadow_deep =
+                            (1.0 - smoothstep(0.02, 0.14, lum)) * hair_core_gate * shine_str * 0.08;
+                        let add =
+                            hair_core_gate * shine_str * (0.045 * silk_band + 0.11 * strand_sheen);
+                        r = (r * (1.0 - shadow_deep) + add + high_r * hair_core_gate * shine_str * 0.18)
+                            .clamp(0.0, 1.0);
+                        g = (g * (1.0 - shadow_deep) + add + high_g * hair_core_gate * shine_str * 0.18)
+                            .clamp(0.0, 1.0);
+                        b = (b * (1.0 - shadow_deep) + add + high_b * hair_core_gate * shine_str * 0.18)
+                            .clamp(0.0, 1.0);
                     }
                     if params.hair_dye_strength > 0.5 && params.hair_dye_color != "none" {
-                        let dye_a = (sem.hair * (params.hair_dye_strength / 100.0) * 0.72).clamp(0.0, 0.90);
+                        let dye_a =
+                            (hair_core_gate * (params.hair_dye_strength / 100.0) * 0.72).clamp(0.0, 0.90);
                         let lum = 0.299 * r + 0.587 * g + 0.114 * b;
                         let (dr, dg, db) = match params.hair_dye_color.as_str() {
                             "espresso" => (lum * 0.62, lum * 0.50, lum * 0.42),
@@ -4111,38 +4631,88 @@ pub fn apply_retouch_pipeline_with_scene(
                         let clean_str = (params.backdrop_clean / 100.0).max(if params.bg_clean_defects { 0.72 } else { 0.0 });
                         let band_str = (params.backdrop_banding_fix / 100.0).max(if params.bg_remove_banding { 0.78 } else { 0.0 });
 
-                        if !blur_bokeh.is_empty() && bg_mask > 0.01 {
+                        if !blur_bokeh.is_empty() && (bg_mask > 0.005 || stray_str > 0.005) {
                             let rb = blur_bokeh[idx];
                             let gb = blur_bokeh[idx + 1];
                             let bb = blur_bokeh[idx + 2];
+                            let mut stray_healed = 0.0f32;
 
-                            if stray_str > 0.005 && bg_mask > 0.15 && ny < face.mouth_y + 0.08 {
-                                let sa = (stray_str * bg_mask * 0.88).clamp(0.0, 0.94);
-                                r = r * (1.0 - sa) + rb * sa;
-                                g = g * (1.0 - sa) + gb * sa;
-                                b = b * (1.0 - sa) + bb * sa;
+                            if stray_str > 0.005 && ny < 0.96 {
+                                let in_face_interior = face.face_rx > 0.01
+                                    && ((nx - face.center_x) / (face.face_rx * 0.94)).powi(2)
+                                        + ((ny - face.center_y) / (face.face_ry * 0.94)).powi(2)
+                                        < 1.0;
+                                // Strictly protect ears, face oval/edges, neck, eyes, eyebrows, lips, and dense shirt interior
+                                let is_protected_subject = in_face_interior
+                                    || sem.skin > 0.12
+                                    || sem.clothing > 0.45
+                                    || skin_weight(r, g, b) > 0.30
+                                    || sem.lips_outer > 0.05
+                                    || sem.eyebrow > 0.05
+                                    || sem.eye > 0.05;
+                                let near_hair_halo = fg_a > 0.015
+                                    || sem.hair > 0.02
+                                    || (face.face_rx > 0.01
+                                        && (nx - face.center_x).abs() < face.face_rx * 3.4
+                                        && ny < (face.chin_y + face.face_ry * 1.95).min(0.96)
+                                        && ny > (face.forehead_y - face.face_ry * 1.25).max(0.0));
+                                if !is_protected_subject && near_hair_halo {
+                                    let min_dim = w.min(h) as f32;
+                                    let r_inner = (min_dim * 0.0075).clamp(5.0, 12.0);
+                                    let r_mid = (min_dim * 0.026).clamp(14.0, 38.0);
+                                    let r_far = (min_dim * 0.068).clamp(30.0, 88.0);
+                                    let (bg_r, bg_g, bg_b, strand_w) = clean_stray_hair_bg(
+                                        &base_rgb,
+                                        &blur_fine,
+                                        &blur_med,
+                                        &gm.fg_alpha,
+                                        w,
+                                        h,
+                                        x,
+                                        y,
+                                        r_inner,
+                                        r_mid,
+                                        r_far,
+                                        stray_str,
+                                        r,
+                                        g,
+                                        b,
+                                        rb,
+                                        gb,
+                                        bb,
+                                    );
+                                    if strand_w > 0.01 {
+                                        let heal_opacity = (0.35 + 0.63 * smoothstep(0.02, 0.32, stray_str)).clamp(0.0, 0.98);
+                                        let sa = (strand_w * heal_opacity).clamp(0.0, 0.98);
+                                        stray_healed = sa;
+                                        r = r * (1.0 - sa) + bg_r * sa;
+                                        g = g * (1.0 - sa) + bg_g * sa;
+                                        b = b * (1.0 - sa) + bg_b * sa;
+                                    }
+                                }
                             }
+                            let keep_unsmudged = (1.0 - stray_healed).clamp(0.0, 1.0);
                             if params.bg_clean_distractions && bg_mask > 0.04 {
                                 let dev = (r - rb).abs() + (g - gb).abs() + (b - bb).abs();
-                                let spot_w = (smoothstep(0.05, 0.22, dev) * bg_mask * 0.92).clamp(0.0, 0.95);
+                                let spot_w = (smoothstep(0.05, 0.22, dev) * bg_mask * 0.92 * keep_unsmudged).clamp(0.0, 0.95);
                                 r = r * (1.0 - spot_w) + rb * spot_w;
                                 g = g * (1.0 - spot_w) + gb * spot_w;
                                 b = b * (1.0 - spot_w) + bb * spot_w;
                             }
                             if bg_blur_str > 0.005 {
-                                let ba = (bg_mask * bg_blur_str).clamp(0.0, 0.98);
+                                let ba = (bg_mask * bg_blur_str * keep_unsmudged).clamp(0.0, 0.98);
                                 r = r * (1.0 - ba) + rb * ba;
                                 g = g * (1.0 - ba) + gb * ba;
                                 b = b * (1.0 - ba) + bb * ba;
                             }
                             if clean_str > 0.005 && bg_mask > 0.02 {
-                                let ca = (bg_mask * clean_str * 0.85).clamp(0.0, 0.92);
+                                let ca = (bg_mask * clean_str * 0.85 * keep_unsmudged).clamp(0.0, 0.92);
                                 r = r * (1.0 - ca) + rb * ca;
                                 g = g * (1.0 - ca) + gb * ca;
                                 b = b * (1.0 - ca) + bb * ca;
                             }
                             if band_str > 0.005 && bg_mask > 0.02 {
-                                let bf_a = (bg_mask * band_str * 0.82).clamp(0.0, 0.92);
+                                let bf_a = (bg_mask * band_str * 0.82 * keep_unsmudged).clamp(0.0, 0.92);
                                 let dither = ((((x * 1973 + y * 9277) ^ 0x68bc21eb) & 0xff) as f32 / 255.0 - 0.5) * 0.006;
                                 r = r * (1.0 - bf_a) + (rb + dither) * bf_a;
                                 g = g * (1.0 - bf_a) + (gb + dither) * bf_a;
@@ -4494,7 +5064,6 @@ pub fn apply_retouch_pipeline_with_scene(
         || params.eye_size.abs() > 0.3
         || params.eyebrow_lift.abs() > 0.3
         || params.hair_volume > 0.3
-        || params.hair_part_line > 0.3
         || params.neck_slim > 0.3
         || params.shoulder_sculpt.abs() > 0.3
         || params.waist_slim > 0.3
@@ -4704,15 +5273,19 @@ pub fn apply_retouch_pipeline_with_scene(
                         }
                     }
 
-                    // 11. Hair Volume & Hair Part Line
-                    if params.hair_volume > 0.3 || params.hair_part_line > 0.3 {
-                        let vol = ((params.hair_volume + params.hair_part_line * 0.6) / 100.0) * 0.068 * face.face_ry;
-                        let crown_y = (face.forehead_y - face.face_ry * 0.18).max(0.04);
-                        let dx = (sx - face.center_x) / (face.face_rx * 1.40);
-                        let dy = (sy - crown_y) / (face.face_ry * 0.68);
+                    // 11. Hair Volume (Strictly upper crown & hairline above eyebrows — never warps face/ears)
+                    if params.hair_volume > 0.3 {
+                        let vol = (params.hair_volume / 100.0) * 0.045 * face.face_ry;
+                        let crown_y = (face.forehead_y - face.face_ry * 0.34).max(0.03);
+                        let brow_top = (face.left_eye_y.min(face.right_eye_y) - face.face_ry * 0.14)
+                            .max(face.forehead_y);
+                        let above_face_gate =
+                            smoothstep(brow_top, (brow_top - face.face_ry * 0.24).max(0.01), sy);
+                        let dx = (sx - face.center_x) / (face.face_rx * 1.38).max(0.08);
+                        let dy = (sy - crown_y) / (face.face_ry * 0.44).max(0.06);
                         let r2 = dx * dx + dy * dy;
-                        if r2 < 1.0 {
-                            sy += vol * (1.0 - r2).powi(2);
+                        if r2 < 1.0 && above_face_gate > 0.001 {
+                            sy += vol * (1.0 - r2).powi(2) * above_face_gate;
                         }
                     }
 
@@ -5137,7 +5710,146 @@ fn apply_exif_orientation(img: DynamicImage, orientation: u16) -> DynamicImage {
     }
 }
 
-/// Decode Canon CR2 / camera RAW files and automatically apply vertical/horizontal EXIF orientation
+/// Extract the largest embedded JPEG preview from a RAW / DNG byte buffer.
+/// Returns the decoded image and its own EXIF orientation (if present in the JPEG stream).
+fn extract_largest_embedded_jpeg(bytes: &[u8]) -> Option<(DynamicImage, Option<u16>)> {
+    let mut best: Option<(u64, DynamicImage, Option<u16>)> = None;
+    let mut idx = 0usize;
+    let mut attempts = 0usize;
+
+    while idx + 4 <= bytes.len() && attempts < 20 {
+        if bytes[idx] == 0xFF && bytes[idx + 1] == 0xD8 && bytes[idx + 2] == 0xFF {
+            let marker = bytes[idx + 3];
+            let valid_marker = matches!(marker, 0xC0..=0xC4 | 0xDB | 0xE0..=0xEF | 0xFE);
+            if valid_marker {
+                attempts += 1;
+                if let Ok(img) = image::load_from_memory_with_format(&bytes[idx..], ImageFormat::Jpeg) {
+                    let (w, h) = (img.width() as u64, img.height() as u64);
+                    let area = w * h;
+                    if w >= 160 && h >= 160 {
+                        let scan_len = bytes.len().saturating_sub(idx).min(65536);
+                        let sub = &bytes[idx..idx + scan_len];
+                        let jpg_orient = (0..sub.len().saturating_sub(16))
+                            .find(|&p| &sub[p..p + 6] == b"Exif\0\0")
+                            .and_then(|p| parse_tiff_orientation(&sub[p + 6..]));
+
+                        if best.as_ref().map_or(true, |(best_area, _, _)| area > *best_area) {
+                            best = Some((area, img, jpg_orient));
+                        }
+                    }
+                    // Skip past SOI header to continue scanning
+                    idx += 4;
+                    continue;
+                }
+            }
+        }
+        idx += 1;
+    }
+
+    best.map(|(_, img, orient)| (img, orient))
+}
+
+fn decode_with_rawler(path: &Path, exif_orient: u16) -> Result<DynamicImage, String> {
+    let rawfile = rawler::rawsource::RawSource::new(path)
+        .map_err(|e| format!("Failed to read RAW file {:?}: {}", path.file_name(), e))?;
+    let decoder = rawler::get_decoder(&rawfile)
+        .map_err(|e| format!("RAW decoder error for {:?}: {}", path.file_name(), e))?;
+    let raw_params = rawler::decoders::RawDecodeParams::default();
+
+    let last_err = match decoder.raw_image(&rawfile, &raw_params, false) {
+        Ok(rawimage) => {
+            let raw_o = rawimage.orientation.to_u16();
+            let effective_orient = if (1..=8).contains(&raw_o) {
+                raw_o
+            } else {
+                exif_orient
+            };
+            let dev = rawler::imgop::develop::RawDevelop::default();
+            match dev.develop_intermediate(&rawimage) {
+                Ok(inter) => {
+                    if let Some(dyn_img) = inter.to_dynamic_image() {
+                        return Ok(apply_exif_orientation(dyn_img, effective_orient));
+                    }
+                    "Failed to convert developed RAW buffer".to_string()
+                }
+                Err(e) => format!("RAW develop error: {}", e),
+            }
+        }
+        Err(e) => format!("RAW decode error: {}", e),
+    };
+
+    if let Ok(Some(full)) = decoder.full_image(&rawfile, &raw_params) {
+        return Ok(apply_exif_orientation(full, exif_orient));
+    }
+    if let Ok(Some(prev)) = decoder.preview_image(&rawfile, &raw_params) {
+        return Ok(apply_exif_orientation(prev, exif_orient));
+    }
+
+    Err(last_err)
+}
+
+#[cfg(target_os = "windows")]
+fn decode_via_windows_wic(path: &Path, exif_orient: u16) -> Option<DynamicImage> {
+    use std::os::windows::process::CommandExt;
+
+    let path_str = path.to_str()?;
+    let pid = std::process::id();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let tmp_png = std::env::temp_dir().join(format!("retouch_wic_{pid}_{now}.png"));
+    let tmp_str = tmp_png.to_str()?.to_string();
+
+    let script = r#"
+Add-Type -AssemblyName PresentationCore
+$inPath = $env:RETOUCH_WIC_IN
+$outPath = $env:RETOUCH_WIC_OUT
+$stream = [System.IO.File]::OpenRead($inPath)
+try {
+  $dec = [System.Windows.Media.Imaging.BitmapDecoder]::Create($stream, [System.Windows.Media.Imaging.BitmapCreateOptions]::PreservePixelFormat, [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad)
+  $frame = $dec.Frames[0]
+  $enc = New-Object System.Windows.Media.Imaging.PngBitmapEncoder
+  $enc.Frames.Add([System.Windows.Media.Imaging.BitmapFrame]::Create($frame))
+  $outStream = [System.IO.File]::Create($outPath)
+  try { $enc.Save($outStream) } finally { $outStream.Dispose() }
+} finally {
+  $stream.Dispose()
+}
+"#;
+
+    let status = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", script])
+        .env("RETOUCH_WIC_IN", path_str)
+        .env("RETOUCH_WIC_OUT", &tmp_str)
+        .creation_flags(0x08000000)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .ok();
+
+    let result = if status.is_some_and(|s| s.success()) && tmp_png.exists() {
+        let jpg_orient = read_exif_orientation_tag(&tmp_png);
+        image::open(&tmp_png).ok().map(|img| {
+            let effective = if jpg_orient != 1 {
+                jpg_orient
+            } else if exif_orient != 1 && img.width() > img.height() {
+                exif_orient
+            } else {
+                1
+            };
+            apply_exif_orientation(img, effective)
+        })
+    } else {
+        None
+    };
+
+    let _ = std::fs::remove_file(&tmp_png);
+    result
+}
+
+/// Decode camera RAW / iPhone DNG (Bayer, LinearRGB, Lossless JPEG, JPEG-XL ProRAW) or standard image files
+/// and automatically apply EXIF orientation.
 fn decode_raw_or_image(path: &Path) -> Result<DynamicImage, String> {
     let exif_orient = read_exif_orientation_tag(path);
 
@@ -5190,104 +5902,54 @@ fn decode_raw_or_image(path: &Path) -> Result<DynamicImage, String> {
         let _ = std::fs::remove_file(&tmp_jpg);
     }
 
-    let raw = rawloader::decode_file(path)
-        .map_err(|e| format!("RAW decode error for {:?}: {}", path.file_name(), e))?;
+    let rawler_res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        decode_with_rawler(path, exif_orient)
+    }));
 
-    let w = raw.width;
-    let h = raw.height;
-    if w < 4 || h < 4 {
-        return Err("Invalid RAW sensor dimensions".to_string());
+    match rawler_res {
+        Ok(Ok(img)) => return Ok(img),
+        Ok(Err(_)) | Err(_) => {}
     }
 
-    let wb = raw.wb_coeffs;
-    let r_gain = if wb[0].is_finite() && wb[0] > 0.0 { wb[0] } else { 1.9 };
-    let g_gain = if wb[1].is_finite() && wb[1] > 0.0 { wb[1] } else { 1.0 };
-    let b_gain = if wb[2].is_finite() && wb[2] > 0.0 { wb[2] } else { 1.5 };
-    let min_gain = r_gain.min(g_gain).min(b_gain).max(1e-4);
-    let rg = r_gain / min_gain;
-    let gg = g_gain / min_gain;
-    let bg = b_gain / min_gain;
-
-    let black = raw.blacklevels[0] as f32;
-    let white = (raw.whitelevels[0] as f32).max(black + 100.0);
-    let range = white - black;
-
-    let sensor_f32: Vec<f32> = match raw.data {
-        rawloader::RawImageData::Integer(ref data) => data
-            .par_iter()
-            .map(|&v| ((v as f32 - black) / range).clamp(0.0, 1.0))
-            .collect(),
-        rawloader::RawImageData::Float(ref data) => data
-            .par_iter()
-            .map(|&v| ((v - black) / range).clamp(0.0, 1.0))
-            .collect(),
-    };
-
-    let out_w = w / 2;
-    let out_h = h / 2;
-    let cfa = &raw.cfa;
-    let mut rgb_out = vec![0u8; out_w * out_h * 4];
-
-    rgb_out
-        .par_chunks_mut(out_w * 4)
-        .enumerate()
-        .for_each(|(oy, row_out)| {
-            let sy = oy * 2;
-            for ox in 0..out_w {
-                let sx = ox * 2;
-                let mut r_acc = 0.0f32;
-                let mut g_acc = 0.0f32;
-                let mut b_acc = 0.0f32;
-                let mut rc = 0.0f32;
-                let mut gc = 0.0f32;
-                let mut bc = 0.0f32;
-
-                for dy in 0..2 {
-                    for dx in 0..2 {
-                        let px = sx + dx;
-                        let py = sy + dy;
-                        let val = sensor_f32[py * w + px];
-                        match cfa.color_at(py, px) {
-                            0 => {
-                                r_acc += val;
-                                rc += 1.0;
-                            }
-                            1 | 3 => {
-                                g_acc += val;
-                                gc += 1.0;
-                            }
-                            2 => {
-                                b_acc += val;
-                                bc += 1.0;
-                            }
-                            _ => {
-                                g_acc += val;
-                                gc += 1.0;
-                            }
-                        }
-                    }
-                }
-
-                let r_lin = ((r_acc / rc.max(1.0)) * rg).clamp(0.0, 1.0);
-                let g_lin = ((g_acc / gc.max(1.0)) * gg).clamp(0.0, 1.0);
-                let b_lin = ((b_acc / bc.max(1.0)) * bg).clamp(0.0, 1.0);
-
-                let r_srgb = (r_lin.powf(1.0 / 2.2) * 255.0).round() as u8;
-                let g_srgb = (g_lin.powf(1.0 / 2.2) * 255.0).round() as u8;
-                let b_srgb = (b_lin.powf(1.0 / 2.2) * 255.0).round() as u8;
-
-                let idx = ox * 4;
-                row_out[idx] = r_srgb;
-                row_out[idx + 1] = g_srgb;
-                row_out[idx + 2] = b_srgb;
-                row_out[idx + 3] = 255;
-            }
+    let embedded_preview = std::fs::read(path)
+        .ok()
+        .and_then(|bytes| extract_largest_embedded_jpeg(&bytes))
+        .map(|(img, jpg_orient)| {
+            let effective = match jpg_orient {
+                Some(o) if (1..=8).contains(&o) && o != 1 => o,
+                _ if exif_orient != 1 && img.width() > img.height() => exif_orient,
+                _ => 1,
+            };
+            apply_exif_orientation(img, effective)
         });
 
-    let rgba_img = RgbaImage::from_raw(out_w as u32, out_h as u32, rgb_out)
-        .ok_or_else(|| "Failed to build decoded RAW buffer".to_string())?;
-    let dyn_raw = DynamicImage::ImageRgba8(rgba_img);
-    Ok(apply_exif_orientation(dyn_raw, exif_orient))
+    #[cfg(target_os = "windows")]
+    {
+        let preview_too_small = embedded_preview
+            .as_ref()
+            .is_none_or(|img| img.width().max(img.height()) < 1200);
+        if preview_too_small {
+            if let Some(wic_img) = decode_via_windows_wic(path, exif_orient) {
+                let use_wic = embedded_preview.as_ref().is_none_or(|prev| {
+                    (wic_img.width() as u64 * wic_img.height() as u64)
+                        >= (prev.width() as u64 * prev.height() as u64)
+                });
+                if use_wic {
+                    return Ok(wic_img);
+                }
+            }
+        }
+    }
+
+    if let Some(preview_img) = embedded_preview {
+        return Ok(preview_img);
+    }
+
+    Err(match rawler_res {
+        Ok(Err(err)) => err,
+        Err(_) => format!("RAW decoder failed unexpectedly for {:?}", path.file_name()),
+        Ok(Ok(_)) => unreachable!(),
+    })
 }
 
 #[tauri::command]
@@ -5314,8 +5976,8 @@ fn load_photo_from_path_cmd(file_path: String) -> Result<ImportedPhotoPayload, S
 
     let rgba = master.to_rgba8();
     let detected_face = detect_face_region(&rgba);
-    // Quality 97 — single lossy encode; keeps fine detail for Rust retouch pipeline.
-    let data_url = encode_jpeg_data_url(&rgba, 97)?;
+    // Quality 99 — preserves original fine detail for lossless-feel editing and Rust retouch pipeline.
+    let data_url = encode_jpeg_data_url(&rgba, 99)?;
 
     Ok(ImportedPhotoPayload {
         path: file_path,
@@ -5339,7 +6001,7 @@ fn rotate_photo_90_cmd(image_base64: String, clockwise: bool) -> Result<Imported
     let w = rgba.width();
     let h = rgba.height();
     let detected_face = detect_face_region(&rgba);
-    let data_url = encode_jpeg_data_url(&rgba, 94)?;
+    let data_url = encode_jpeg_data_url(&rgba, 98)?;
 
     Ok(ImportedPhotoPayload {
         path: String::new(),
@@ -5375,10 +6037,10 @@ fn process_photo_cmd(
     let start = std::time::Instant::now();
     let dyn_img = decode_data_url(&image_base64)?;
 
-    let max_dim = if high_quality { 3840 } else { 1350 };
+    let max_dim = if high_quality { 4096 } else { 2200 };
     let working_img = if dyn_img.width() > max_dim || dyn_img.height() > max_dim {
         dyn_img
-            .resize(max_dim, max_dim, image::imageops::FilterType::Triangle)
+            .resize(max_dim, max_dim, image::imageops::FilterType::CatmullRom)
             .to_rgba8()
     } else {
         dyn_img.to_rgba8()
@@ -5399,7 +6061,7 @@ fn process_photo_cmd(
         decoded_mask.as_ref(),
         decoded_scene.as_ref(),
     );
-    let quality = if high_quality { 95 } else { 90 };
+    let quality = if high_quality { 98 } else { 96 };
     let data_url = if active_params.bg_replace_mode == "transparent" {
         encode_png_data_url(&result_rgba)?
     } else {
@@ -6828,5 +7490,340 @@ mod slider_tests {
         // Arm inner boundary at x=48 remains sharp and opaque without 128x128 pocket-punching bite marks
         let arm_edge_a = out.get_pixel(48, 140).0[3];
         assert_eq!(arm_edge_a, 255, "arm edge was bitten by pocket puncher: {arm_edge_a}");
+    }
+
+    #[test]
+    fn extract_embedded_jpeg_picks_largest_preview_and_dng_fallback_is_panic_free() {
+        let mut small_buf = Cursor::new(Vec::new());
+        let small = DynamicImage::ImageRgba8(RgbaImage::new(200, 180));
+        small.write_to(&mut small_buf, ImageFormat::Jpeg).expect("encode small jpeg");
+
+        let mut large_buf = Cursor::new(Vec::new());
+        let large = DynamicImage::ImageRgba8(RgbaImage::new(420, 320));
+        large.write_to(&mut large_buf, ImageFormat::Jpeg).expect("encode large jpeg");
+
+        let mut fake_dng = Vec::new();
+        fake_dng.extend_from_slice(b"II*\0\x08\0\0\0\0\0\0\0");
+        // Fake noise with SOI-like prefix before real JPEGs
+        fake_dng.extend_from_slice(&[0xFF, 0xD8, 0xFF, 0xFF, 0x00, 0x11]);
+        fake_dng.extend_from_slice(&small_buf.into_inner());
+        fake_dng.extend_from_slice(&[0xAA, 0xBB, 0xCC]);
+        fake_dng.extend_from_slice(&large_buf.into_inner());
+
+        let (best_img, _orient) =
+            extract_largest_embedded_jpeg(&fake_dng).expect("must extract embedded JPEG preview");
+        assert_eq!((best_img.width(), best_img.height()), (420, 320));
+
+        let tmp_path = std::env::temp_dir().join(format!("test_fallback_{}.dng", std::process::id()));
+        std::fs::write(&tmp_path, &fake_dng).expect("write temp dng");
+        let decoded = decode_raw_or_image(&tmp_path);
+        let _ = std::fs::remove_file(&tmp_path);
+        let img = decoded.expect("decode_raw_or_image should succeed via DNG preview fallback");
+        assert_eq!((img.width(), img.height()), (420, 320));
+    }
+
+    #[test]
+    fn face_mole_and_freckle_acne_remove_spots_while_preserving_eyebrow() {
+        let (w, h) = (260u32, 320u32);
+        let mut img = RgbaImage::new(w, h);
+        for y in 0..h {
+            for x in 0..w {
+                // Warm portrait skin base inside face oval
+                let mut r = 216u8;
+                let mut g = 172u8;
+                let mut b = 148u8;
+
+                // Dark mole on right cheek at (155, 195), radius 5px
+                let md2 = (x as i32 - 155).pow(2) + (y as i32 - 195).pow(2);
+                if md2 <= 25 {
+                    r = 48;
+                    g = 36;
+                    b = 30;
+                }
+
+                // Brown freckle on left cheek at (95, 190), radius 3px
+                let fd2 = (x as i32 - 95).pow(2) + (y as i32 - 190).pow(2);
+                if fd2 <= 9 {
+                    r = 150;
+                    g = 104;
+                    b = 82;
+                }
+
+                // Red acne spot on cheek at (112, 205), radius 4px
+                let ad2 = (x as i32 - 112).pow(2) + (y as i32 - 205).pow(2);
+                if ad2 <= 16 {
+                    r = 210;
+                    g = 105;
+                    b = 98;
+                }
+
+                // Dark eyebrow line at y in 118..124, x in 78..112
+                if (118..=124).contains(&y) && (78..=112).contains(&x) {
+                    r = 38;
+                    g = 30;
+                    b = 26;
+                }
+
+                // Horizontal skin crease (e.g. eyelid fold / upper-lip shadow) inside face skin
+                if (168..=170).contains(&y) && (108..=148).contains(&x) {
+                    r = 95;
+                    g = 70;
+                    b = 58;
+                }
+
+                // Carved-out nostril dark pixel around (128, 145)
+                let nd2 = (x as i32 - 128).pow(2) + (y as i32 - 145).pow(2);
+                if nd2 <= 25 {
+                    r = 46;
+                    g = 36;
+                    b = 32;
+                }
+
+                img.put_pixel(x, y, image::Rgba([r, g, b, 255]));
+            }
+        }
+
+        // Paint semantic mask matching face oval (R=255), eyebrow (G=110), and carved-out nostril (R=0)
+        let mut mask = RgbaImage::new(w, h);
+        for y in 0..h {
+            for x in 0..w {
+                let is_brow = (115..=127).contains(&y) && (75..=115).contains(&x);
+                let is_nostril_hole = (x as i32 - 128).pow(2) + (y as i32 - 145).pow(2) <= 36;
+                let r_code = if is_nostril_hole { 0 } else { 255 };
+                let g_code = if is_brow { 110 } else { 0 };
+                mask.put_pixel(x, y, image::Rgba([r_code, g_code, 0, 255]));
+            }
+        }
+
+        let mut face = FaceRegion::default();
+        face.center_x = 0.5;
+        face.center_y = 0.52;
+        face.face_rx = 0.34;
+        face.face_ry = 0.42;
+        face.chin_y = 0.90;
+        face.nose_x = 0.50;
+        face.nose_y = 0.55;
+
+        // 1. Test Face Mole removal + Eyebrow protection
+        let mut mole_params = RetouchParams::default();
+        mole_params.face = face.clone();
+        mole_params.face_mole = 85.0;
+        let out_mole = apply_retouch_pipeline(&img, &mole_params, Some(&mask));
+        let healed_mole = out_mole.get_pixel(155, 195).0;
+        assert!(
+            healed_mole[0] > 180 && healed_mole[1] > 140,
+            "faceMole should lift dark mole toward clean skin (got {:?})",
+            healed_mole
+        );
+        let kept_brow = out_mole.get_pixel(95, 121).0;
+        assert!(
+            kept_brow[0] < 60,
+            "faceMole must preserve eyebrow pixels (got {:?})",
+            kept_brow
+        );
+
+        // 2. Test Freckle & Acne removal
+        let mut fa_params = RetouchParams::default();
+        fa_params.face = face.clone();
+        fa_params.freckle_acne = 90.0;
+        let out_fa = apply_retouch_pipeline(&img, &fa_params, Some(&mask));
+        let healed_freckle = out_fa.get_pixel(95, 190).0;
+        assert!(
+            healed_freckle[0] > 195 && healed_freckle[1] > 150,
+            "freckleAcne should clean freckle toward surrounding skin (got {:?})",
+            healed_freckle
+        );
+        let healed_acne = out_fa.get_pixel(112, 205).0;
+        assert!(
+            healed_acne[1] > 148 && (healed_acne[0] as i32 - healed_acne[1] as i32) < 60,
+            "freckleAcne should neutralize red acne spot (got {:?})",
+            healed_acne
+        );
+
+        // 2b. Test combined max sliders NEVER smear horizontal skin creases or carved-out nostrils
+        let mut combo_params = RetouchParams::default();
+        combo_params.face = face.clone();
+        combo_params.face_mole = 100.0;
+        combo_params.freckle_acne = 100.0;
+        let out_combo = apply_retouch_pipeline(&img, &combo_params, Some(&mask));
+        let kept_crease = out_combo.get_pixel(128, 169).0;
+        assert!(
+            kept_crease[0] < 115,
+            "faceMole+freckleAcne must preserve 1D horizontal creases (got {:?})",
+            kept_crease
+        );
+        let kept_nostril = out_combo.get_pixel(128, 145).0;
+        assert!(
+            kept_nostril[0] < 60,
+            "faceMole+freckleAcne must preserve carved-out nostrils (got {:?})",
+            kept_nostril
+        );
+
+        // 3. Test Manual Spot Heal erases dark mole core completely
+        let mut spot_params = RetouchParams::default();
+        spot_params.face = face;
+        spot_params.blemish_spots.push(BlemishSpot {
+            x: 155.0 / w as f32,
+            y: 195.0 / h as f32,
+            radius: 10.0 / w.min(h) as f32,
+        });
+        let out_spot = apply_retouch_pipeline(&img, &spot_params, Some(&mask));
+        let healed_spot = out_spot.get_pixel(155, 195).0;
+        assert!(
+            healed_spot[0] > 200 && healed_spot[1] > 160,
+            "manual Spot Heal should cleanly replace dark mole core (got {:?})",
+            healed_spot
+        );
+    }
+
+    #[test]
+    fn hair_retouch_removes_flyaways_fills_part_line_and_preserves_ears_and_wall() {
+        let (w, h) = (240u32, 240u32);
+        let mut img = RgbaImage::new(w, h);
+        let mut mask = RgbaImage::new(w, h);
+        let mut scene = RgbaImage::new(w, h);
+
+        for y in 0..h {
+            for x in 0..w {
+                let is_face = ((x as f32 - 120.0) / 38.0).powi(2)
+                    + ((y as f32 - 108.0) / 48.0).powi(2)
+                    <= 1.0;
+                let is_ear = (162..=172).contains(&x) && (92..=118).contains(&y);
+                let is_crown_hair =
+                    (74..=166).contains(&x) && (22..=64).contains(&y) && !is_face;
+                let is_side_hair = ((64..=82).contains(&x) || (158..=176).contains(&x))
+                    && (50..=190).contains(&y)
+                    && !is_face
+                    && !is_ear;
+                let is_part_line = (119..=121).contains(&x) && (28..=58).contains(&y);
+                let is_shirt = (75..=195).contains(&x) && (192..=230).contains(&y);
+                let is_stray_cloud =
+                    (180..=201).contains(&x) && (x - 180) % 3 == 0 && (115..=178).contains(&y);
+                let is_stray = (x == 188 && (70..=178).contains(&y)) || is_stray_cloud;
+
+                let rgb = if is_part_line {
+                    [214, 174, 150, 255]
+                } else if is_ear {
+                    [198, 148, 122, 255]
+                } else if is_face {
+                    [216, 174, 148, 255]
+                } else if is_shirt {
+                    [30, 36, 48, 255]
+                } else if is_crown_hair || is_side_hair || is_stray {
+                    [24, 20, 18, 255]
+                } else {
+                    [236, 224, 212, 255]
+                };
+                img.put_pixel(x, y, image::Rgba(rgb));
+
+                let r_skin = if is_face { 255 } else { 0 };
+                let b_hair = if (is_crown_hair || is_side_hair) && !is_part_line {
+                    255
+                } else {
+                    0
+                };
+                mask.put_pixel(x, y, image::Rgba([r_skin, 0, b_hair, 255]));
+
+                // Simulate high-confidence scene fg on crisscrossed shoulder puff + slight blurred cloth bleed above collar
+                let fg_u8 = if is_face || is_crown_hair || is_side_hair || is_shirt {
+                    255u8
+                } else if is_stray_cloud {
+                    232u8
+                } else if is_ear {
+                    135u8
+                } else if is_stray {
+                    95u8
+                } else {
+                    0u8
+                };
+                let cloth_u8 = if is_shirt {
+                    255u8
+                } else if (170..=191).contains(&y) && (75..=205).contains(&x) {
+                    85u8
+                } else {
+                    0u8
+                };
+                let solid_u8 = if is_face || is_shirt { 255u8 } else { 0u8 };
+                scene.put_pixel(x, y, image::Rgba([fg_u8, cloth_u8, solid_u8, 255]));
+            }
+        }
+
+        let mut params = RetouchParams::default();
+        params.face = FaceRegion {
+            center_x: 0.50,
+            center_y: 0.45,
+            face_rx: 0.16,
+            face_ry: 0.20,
+            forehead_x: 0.50,
+            forehead_y: 0.28,
+            chin_x: 0.50,
+            chin_y: 0.65,
+            left_eye_x: 0.43,
+            left_eye_y: 0.40,
+            right_eye_x: 0.57,
+            right_eye_y: 0.40,
+            nose_x: 0.50,
+            nose_y: 0.47,
+            mouth_x: 0.50,
+            mouth_y: 0.54,
+            ..FaceRegion::default()
+        };
+        params.stray_hair = 54.0;
+        params.hair_volume = 40.0;
+        params.hair_part_line = 75.0;
+        params.hair_shine = 65.0;
+        params.backdrop_clean = 85.0;
+
+        let out = apply_retouch_pipeline_with_scene(&img, &params, Some(&mask), Some(&scene));
+
+        // 1. Ear outside face oval must NEVER turn black/dark
+        let ear_px = out.get_pixel(167, 105).0;
+        assert!(
+            ear_px[0] > 175 && ear_px[1] > 125,
+            "ear skin should stay warm and uncorrupted (got {:?})",
+            ear_px
+        );
+
+        // 2. Exposed bright scalp part line inside crown hair must thicken darker
+        let part_px = out.get_pixel(120, 42).0;
+        assert!(
+            part_px[0] < 105,
+            "hair_part_line should fill exposed scalp gap (got {:?})",
+            part_px
+        );
+
+        // 3. Wide multi-strand shoulder cloud & gap between strands must erase cleanly without gray smear
+        for &fx in &[183u32, 186, 189, 192, 195, 198, 201, 184] {
+            let cloud_px = out.get_pixel(fx, 150).0;
+            assert!(
+                cloud_px[0] >= 218 && cloud_px[1] >= 206,
+                "stray_hair wide cloud pixel at x={fx} should be clean wall tone with no gray smear (got {:?})",
+                cloud_px
+            );
+        }
+
+        // 4. Main solid side hair interior must remain dark hair (not eaten)
+        let solid_hair_px = out.get_pixel(168, 145).0;
+        assert!(
+            solid_hair_px[0] < 45,
+            "solid side hair interior should remain dark (got {:?})",
+            solid_hair_px
+        );
+
+        // 5. Dark shirt shoulder below wispy cloud must stay uncorrupted
+        let shirt_px = out.get_pixel(185, 205).0;
+        assert!(
+            shirt_px[0] < 55 && shirt_px[2] < 70,
+            "dark shirt shoulder should remain intact (got {:?})",
+            shirt_px
+        );
+
+        // 6. Clean studio wall next to hair must NOT gain a muddy dark halo even with backdrop_clean on
+        let wall_px = out.get_pixel(178, 130).0;
+        assert!(
+            wall_px[0] >= 225 && wall_px[1] >= 214,
+            "clean studio wall near hair must keep bright wall tone (got {:?})",
+            wall_px
+        );
     }
 }
