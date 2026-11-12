@@ -1,11 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Retouch Pro",
+  "productName": "Retouch Studio Pro",
   "version": "1.0.0",
-  "identifier": "com.collabssoftware.retouchpro",
+  "identifier": "com.retouchstudio.pro",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://127.0.0.1:1420",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
@@ -13,14 +13,14 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "Retouch Pro — AI Portrait & RAW Studio (by Collabs Software)",
+        "title": "Retouch Studio Pro — Chỉnh Sửa Chân Dung Với AI & Ảnh RAW",
         "width": 1520,
         "height": 940,
         "minWidth": 1100,
         "minHeight": 720,
         "resizable": true,
         "fullscreen": false,
-        "backgroundColor": "#060608"
+        "backgroundColor": "#000000"
       }
     ],
     "security": {
@@ -30,11 +30,11 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "publisher": "Collabs Software",
-    "copyright": "© 2026 Collabs Software. All rights reserved.",
+    "publisher": "Retouch Studio",
+    "copyright": "© 2026 Retouch Studio",
     "category": "Photography",
-    "shortDescription": "Professional AI Portrait & RAW Photo Editing",
-    "longDescription": "Retouch Pro by Collabs Software — free, offline AI portrait retouching and RAW photo editing with Lightroom-style sliders. Made by Dave Groennesby.",
+    "shortDescription": "Phần mềm chỉnh sửa chân dung Với AI & ảnh RAW chuyên nghiệp",
+    "longDescription": "Retouch Studio Pro — công cụ chỉnh sửa chân dung với AI (478 điểm khuôn mặt), xử lý ảnh RAW và 148 thanh trượt màu sắc chạy offline hoàn toàn.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -46,7 +46,7 @@
       "nsis": {
         "installerIcon": "icons/icon.ico",
         "installMode": "currentUser",
-        "languages": ["English", "Dutch"]
+        "languages": ["English"]
       }
     },
     "macOS": {

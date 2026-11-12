@@ -1,8 +1,8 @@
 {
-  "name": "retouch-pro",
+  "name": "retouch-studio-pro",
   "private": true,
   "version": "1.0.0",
-  "description": "Open-source cross-platform AI Portrait & Photo Retouching Studio built with Rust & Tauri v2",
+  "description": "Phần mềm chỉnh sửa chân dung AI & ảnh RAW chạy offline (Rust + Tauri v2)",
   "type": "module",
   "scripts": {
     "dev": "vite",

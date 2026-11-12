@@ -137,6 +137,36 @@ fn default_none_str() -> String {
 fn default_original_str() -> String {
     "original".to_string()
 }
+fn default_bg_custom_color() -> String {
+    "#e8eef5".to_string()
+}
+fn default_auto_str() -> String {
+    "auto".to_string()
+}
+fn default_all_str() -> String {
+    "all".to_string()
+}
+fn default_keep_scope_str() -> String {
+    "subject_and_related".to_string()
+}
+fn default_fill_area_str() -> String {
+    "full_image".to_string()
+}
+fn default_fill_mode_str() -> String {
+    "cover".to_string()
+}
+fn default_normal_str() -> String {
+    "normal".to_string()
+}
+fn default_multiply_str() -> String {
+    "multiply".to_string()
+}
+fn default_true() -> bool {
+    true
+}
+fn default_dpi() -> f32 {
+    300.0
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -407,9 +437,25 @@ pub struct RetouchParams {
     #[serde(default = "default_none_str")]
     pub lut_preset: String,
 
-    // --- MODULE 3: BACKGROUND, LENS BLUR & CLOTHING ---
+    // --- MODULE 3 & 3B: BACKGROUND, LENS BLUR & CLOTHING ---
     pub clothing_dewrinkle: f32,
     pub clothing_lint_clean: f32,
+    #[serde(default = "default_all_str")]
+    pub clothing_target: String,
+    #[serde(default = "default_100")]
+    pub clothing_small_wrinkles: f32,
+    #[serde(default = "default_100")]
+    pub clothing_large_wrinkles: f32,
+    #[serde(default)]
+    pub clothing_sweat_stain: f32,
+    #[serde(default = "default_50")]
+    pub clothing_sweat_evenness: f32,
+    #[serde(default)]
+    pub clothing_edge_smooth: f32,
+    #[serde(default = "default_50")]
+    pub clothing_edge_refine: f32,
+    #[serde(default)]
+    pub clothing_moire_remove: f32,
     pub backdrop_clean: f32,
     pub backdrop_banding_fix: f32,
     pub sky_enhance: f32,
@@ -420,6 +466,60 @@ pub struct RetouchParams {
     pub lens_blur_focal_range: f32,
     #[serde(default = "default_original_str")]
     pub bg_replace_mode: String,
+    #[serde(default = "default_bg_custom_color")]
+    pub bg_custom_color: String,
+    #[serde(default)]
+    pub bg_custom_image: String,
+
+    // Evoto Background Optimization, Matte Edge Refinement & Shadow Composite
+    #[serde(default)]
+    pub bg_clean_distractions: bool,
+    #[serde(default)]
+    pub bg_clean_defects: bool,
+    #[serde(default)]
+    pub bg_even_brightness: bool,
+    #[serde(default)]
+    pub bg_remove_banding: bool,
+    #[serde(default = "default_auto_str")]
+    pub bg_edge_mode: String,
+    #[serde(default = "default_keep_scope_str")]
+    pub bg_keep_scope: String,
+    #[serde(default = "default_fill_area_str")]
+    pub bg_fill_area: String,
+    #[serde(default = "default_fill_mode_str")]
+    pub bg_fill_mode: String,
+    #[serde(default = "default_normal_str")]
+    pub bg_blend_mode: String,
+    #[serde(default)]
+    pub bg_edge_adjust: f32,
+    #[serde(default = "default_100")]
+    pub bg_replace_opacity: f32,
+    #[serde(default)]
+    pub bg_scale: f32,
+    #[serde(default)]
+    pub bg_offset_x: f32,
+    #[serde(default)]
+    pub bg_offset_y: f32,
+    #[serde(default)]
+    pub bg_blur_strength: f32,
+    #[serde(default)]
+    pub bg_decontam: bool,
+    #[serde(default)]
+    pub is_highres_matte: bool,
+    #[serde(default)]
+    pub bg_ground_reflect: bool,
+    #[serde(default)]
+    pub bg_preserve_shadow: bool,
+    #[serde(default = "default_none_str")]
+    pub bg_shadow_type: String,
+    #[serde(default = "default_25")]
+    pub bg_shadow_blur: f32,
+    #[serde(default)]
+    pub bg_shadow_opacity: f32,
+    #[serde(default)]
+    pub bg_shadow_shift: f32,
+    #[serde(default = "default_multiply_str")]
+    pub bg_shadow_blend_mode: String,
 
     // --- MODULE 4: OPTICS, GEOMETRY & TRANSFORM (LIGHTCRAFT OPTICS + UPRIGHT) ---
     #[serde(default)]
@@ -451,6 +551,35 @@ pub struct RetouchParams {
     pub flip_horizontal: bool,
     #[serde(default)]
     pub flip_vertical: bool,
+
+    // Crop: normalized interactive crop rect [0..1], preset/aspect lock, custom pixel size + DPI,
+    // grid visibility, and AI vertical / eye-level alignment flags.
+    #[serde(default)]
+    pub crop_x: f32,
+    #[serde(default)]
+    pub crop_y: f32,
+    #[serde(default = "default_1")]
+    pub crop_w: f32,
+    #[serde(default = "default_1")]
+    pub crop_h: f32,
+    #[serde(default = "default_original_str")]
+    pub crop_preset: String,
+    #[serde(default)]
+    pub crop_aspect_w: f32,   // numerator   e.g. 4.0 for 4:5; 0 = no lock
+    #[serde(default)]
+    pub crop_aspect_h: f32,   // denominator e.g. 5.0 for 4:5; 0 = no lock
+    #[serde(default)]
+    pub crop_custom_w: f32,   // export width  in pixels (0 = use cropped image width)
+    #[serde(default)]
+    pub crop_custom_h: f32,   // export height in pixels (0 = use cropped image height)
+    #[serde(default = "default_dpi")]
+    pub crop_dpi: f32,        // target print DPI (e.g. 300) for ID photo / cm sizing
+    #[serde(default = "default_true")]
+    pub crop_show_grid: bool, // overlay rule-of-thirds grid in preview
+    #[serde(default)]
+    pub crop_align_vertical: bool,   // AI: center subject horizontally/vertically
+    #[serde(default)]
+    pub crop_align_eye: bool,        // AI: straighten & align eye-line horizontally
 
     #[serde(default)]
     pub blemish_spots: Vec<BlemishSpot>,
@@ -624,6 +753,14 @@ impl Default for RetouchParams {
             lut_preset: "none".to_string(),
             clothing_dewrinkle: 0.0,
             clothing_lint_clean: 0.0,
+            clothing_target: "all".to_string(),
+            clothing_small_wrinkles: 100.0,
+            clothing_large_wrinkles: 100.0,
+            clothing_sweat_stain: 0.0,
+            clothing_sweat_evenness: 50.0,
+            clothing_edge_smooth: 0.0,
+            clothing_edge_refine: 50.0,
+            clothing_moire_remove: 0.0,
             backdrop_clean: 0.0,
             backdrop_banding_fix: 0.0,
             sky_enhance: 0.0,
@@ -631,6 +768,32 @@ impl Default for RetouchParams {
             lens_blur_focal_distance: 50.0,
             lens_blur_focal_range: 40.0,
             bg_replace_mode: "original".to_string(),
+            bg_custom_color: "#e8eef5".to_string(),
+            bg_custom_image: String::new(),
+            bg_clean_distractions: false,
+            bg_clean_defects: false,
+            bg_even_brightness: false,
+            bg_remove_banding: false,
+            bg_edge_mode: "auto".to_string(),
+            bg_keep_scope: "subject_and_related".to_string(),
+            bg_fill_area: "full_image".to_string(),
+            bg_fill_mode: "cover".to_string(),
+            bg_blend_mode: "normal".to_string(),
+            bg_edge_adjust: 0.0,
+            bg_replace_opacity: 100.0,
+            bg_scale: 0.0,
+            bg_offset_x: 0.0,
+            bg_offset_y: 0.0,
+            bg_blur_strength: 0.0,
+            bg_decontam: false,
+            is_highres_matte: false,
+            bg_ground_reflect: false,
+            bg_preserve_shadow: false,
+            bg_shadow_type: "none".to_string(),
+            bg_shadow_blur: 25.0,
+            bg_shadow_opacity: 0.0,
+            bg_shadow_shift: 0.0,
+            bg_shadow_blend_mode: "multiply".to_string(),
             optics_distortion: 0.0,
             optics_vignetting: 0.0,
             optics_vignetting_midpoint: 50.0,
@@ -647,6 +810,19 @@ impl Default for RetouchParams {
             geo_offset_y: 0.0,
             flip_horizontal: false,
             flip_vertical: false,
+            crop_x: 0.0,
+            crop_y: 0.0,
+            crop_w: 1.0,
+            crop_h: 1.0,
+            crop_preset: "original".to_string(),
+            crop_aspect_w: 0.0,
+            crop_aspect_h: 0.0,
+            crop_custom_w: 0.0,
+            crop_custom_h: 0.0,
+            crop_dpi: 300.0,
+            crop_show_grid: true,
+            crop_align_vertical: false,
+            crop_align_eye: false,
             blemish_spots: Vec::new(),
             face: FaceRegion::default(),
         }
@@ -794,27 +970,139 @@ fn compute_geometric_weights(nx: f32, ny: f32, face: &FaceRegion) -> SemanticWei
     }
 }
 
-fn build_semantic_grid(mask_img: Option<&RgbaImage>, face: &FaceRegion) -> Vec<SemanticWeights> {
-    let mut raw_grid = vec![SemanticWeights::default(); MASK_DIM * MASK_DIM];
+struct SemanticData {
+    weights: Vec<SemanticWeights>,
+    raw_fg: Vec<f32>,
+    raw_hair: Vec<f32>,
+    raw_solid: Vec<f32>,
+    #[allow(dead_code)]
+    has_neural_scene: bool,
+}
 
-    if let Some(m_img) = mask_img {
-        let mw = m_img.width() as usize;
-        let mh = m_img.height() as usize;
+#[inline]
+fn sample_rgba_bilinear(img: &RgbaImage, nx: f32, ny: f32) -> [f32; 4] {
+    let w = img.width().max(1) as f32;
+    let h = img.height().max(1) as f32;
+    let fx = (nx * (w - 1.0)).clamp(0.0, w - 1.0);
+    let fy = (ny * (h - 1.0)).clamp(0.0, h - 1.0);
+    let x0 = fx.floor() as u32;
+    let y0 = fy.floor() as u32;
+    let x1 = (x0 + 1).min(img.width().saturating_sub(1));
+    let y1 = (y0 + 1).min(img.height().saturating_sub(1));
+    let dx = fx - x0 as f32;
+    let dy = fy - y0 as f32;
+    let p00 = img.get_pixel(x0, y0);
+    let p10 = img.get_pixel(x1, y0);
+    let p01 = img.get_pixel(x0, y1);
+    let p11 = img.get_pixel(x1, y1);
+    let w00 = (1.0 - dx) * (1.0 - dy);
+    let w10 = dx * (1.0 - dy);
+    let w01 = (1.0 - dx) * dy;
+    let w11 = dx * dy;
+    let mix = |c: usize| {
+        (p00[c] as f32 * w00 + p10[c] as f32 * w10 + p01[c] as f32 * w01 + p11[c] as f32 * w11) / 255.0
+    };
+    [mix(0), mix(1), mix(2), mix(3)]
+}
+
+fn build_semantic_grid(
+    mask_img: Option<&RgbaImage>,
+    scene_mask_img: Option<&RgbaImage>,
+    face: &FaceRegion,
+) -> SemanticData {
+    let mut raw_grid = vec![SemanticWeights::default(); MASK_DIM * MASK_DIM];
+    let mut raw_fg = vec![0.0f32; MASK_DIM * MASK_DIM];
+    let mut raw_hair = vec![0.0f32; MASK_DIM * MASK_DIM];
+    let mut raw_solid = vec![0.0f32; MASK_DIM * MASK_DIM];
+    let legacy_has_scene = mask_img
+        .map(|m| m.pixels().any(|p| p[3] < 250))
+        .unwrap_or(false);
+    let has_neural_scene = scene_mask_img.is_some() || legacy_has_scene;
+    let scene_is_single_matte = scene_mask_img
+        .map(|s_img| {
+            s_img
+                .pixels()
+                .all(|p| p[0].abs_diff(p[1]) <= 2 && p[1].abs_diff(p[2]) <= 2)
+        })
+        .unwrap_or(false);
+
+    if mask_img.is_some() || scene_mask_img.is_some() {
         raw_grid
             .par_chunks_mut(MASK_DIM)
+            .zip(raw_fg.par_chunks_mut(MASK_DIM))
+            .zip(raw_hair.par_chunks_mut(MASK_DIM))
+            .zip(raw_solid.par_chunks_mut(MASK_DIM))
             .enumerate()
-            .for_each(|(y, row)| {
-                let sy = ((y * mh) / MASK_DIM).min(mh.saturating_sub(1)) as u32;
-                let ny = y as f32 / MASK_DIM as f32;
+            .for_each(|(y, (((row, fg_row), hair_row), solid_row))| {
+                let ny = y as f32 / (MASK_DIM - 1) as f32;
                 for x in 0..MASK_DIM {
-                    let sx = ((x * mw) / MASK_DIM).min(mw.saturating_sub(1)) as u32;
-                    let nx = x as f32 / MASK_DIM as f32;
-                    let p = m_img.get_pixel(sx, sy);
-                    let r_skin = p[0] as f32 / 255.0;
-                    let g_code = p[1];
-                    let b_hair = p[2] as f32 / 255.0;
-                    let a_scene = p[3];
+                    let nx = x as f32 / (MASK_DIM - 1) as f32;
                     let geo = compute_geometric_weights(nx, ny, face);
+
+                    let (r_skin, g_code, b_hair, a_scene) = if let Some(m_img) = mask_img {
+                        let mw = m_img.width() as usize;
+                        let mh = m_img.height() as usize;
+                        let sx = ((x * mw) / MASK_DIM).min(mw.saturating_sub(1)) as u32;
+                        let sy = ((y * mh) / MASK_DIM).min(mh.saturating_sub(1)) as u32;
+                        let p = m_img.get_pixel(sx, sy);
+                        (p[0] as f32 / 255.0, p[1], p[2] as f32 / 255.0, p[3])
+                    } else {
+                        (geo.skin, 0u8, geo.hair, 255u8)
+                    };
+
+                    let solid_face = if r_skin > 0.72 { r_skin } else { 0.0 };
+                    let (fg_prob, cloth_prob, hair_val, solid_prob) = if let Some(s_img) = scene_mask_img {
+                        let s = sample_rgba_bilinear(s_img, nx, ny);
+                        if scene_is_single_matte {
+                            let matte_a = s[0].clamp(0.0, 1.0);
+                            let h_val = b_hair.max(if geo.hair > 0.12 && matte_a > 0.05 { matte_a } else { 0.0 });
+                            let sol_p = (matte_a * (1.0 - h_val * 0.75)).clamp(0.0, 1.0).max(solid_face);
+                            (matte_a, geo.clothing * matte_a, h_val, sol_p)
+                        } else {
+                            (
+                                s[0].clamp(0.0, 1.0),
+                                s[1].clamp(0.0, 1.0),
+                                b_hair.clamp(0.0, 1.0),
+                                s[2].clamp(0.0, 1.0).max(solid_face),
+                            )
+                        }
+                    } else if legacy_has_scene {
+                        let fg = if a_scene < 40 { 0.0 } else { 1.0 };
+                        let cl = if a_scene.abs_diff(128) <= 28 { 1.0 } else { 0.0 };
+                        let sp = (fg * (1.0 - b_hair * 0.80)).clamp(0.0, 1.0).max(solid_face);
+                        (fg, cl, b_hair.clamp(0.0, 1.0), sp)
+                    } else {
+                        // Geometric-only fallback: extend coverage below torso ellipse using a
+                        // soft vertical centre strip so full-body portraits keep legs/trousers.
+                        // The strip fades at left/right edges (nx ≈ 0 or ≈ 1) and is active
+                        // only below the chin, tapering off towards 100 % of image height so
+                        // the very bottom of frame (ground shadow) is not merged in.
+                        let geo_fg = (1.0 - geo.background).clamp(0.0, 1.0);
+                        let lower_body_fg = if ny > face.chin_y {
+                            // Horizontal soft-window centred on face centre, width ≈ 55% of frame
+                            let half_w = (face.face_rx * 2.8).clamp(0.18, 0.46);
+                            let dx = ((nx - face.center_x).abs() - half_w).max(0.0);
+                            let h_weight = (1.0 - dx / 0.12).clamp(0.0, 1.0);
+                            // Vertical fade: full at chin, falls to 0 near bottom of frame
+                            let v_weight = (1.0 - ((ny - face.chin_y) / (1.0 - face.chin_y + 0.01)).clamp(0.0, 1.0) * 0.35)
+                                .clamp(0.0, 1.0);
+                            h_weight * v_weight * 0.82
+                        } else {
+                            0.0
+                        };
+                        let combined_fg = geo_fg.max(lower_body_fg);
+                        let h_val = b_hair.max(geo.hair * 0.45);
+                        (
+                            combined_fg,
+                            geo.clothing * 0.45,
+                            h_val,
+                            (combined_fg * (1.0 - h_val * 0.85)).clamp(0.0, 1.0).max(solid_face),
+                        )
+                    };
+
+                    fg_row[x] = fg_prob;
+                    hair_row[x] = hair_val;
+                    solid_row[x] = solid_prob;
 
                     row[x] = SemanticWeights {
                         skin: r_skin.max(geo.skin * 0.35),
@@ -827,27 +1115,46 @@ fn build_semantic_grid(mask_img: Option<&RgbaImage>, face: &FaceRegion) -> Vec<S
                         eye: if g_code.abs_diff(160) <= 6 { 1.0 } else { geo.eye * 0.5 },
                         lips_outer: if g_code.abs_diff(205) <= 6 { 1.0 } else { geo.lips_outer * 0.5 },
                         teeth_inner: if g_code.abs_diff(245) <= 6 { 1.0 } else { geo.teeth_inner * 0.5 },
-                        hair: b_hair.max(geo.hair * 0.45),
-                        clothing: if a_scene.abs_diff(128) <= 28 { 1.0 } else { geo.clothing * 0.45 },
-                        background: if a_scene < 40 { 1.0 } else { geo.background * 0.45 },
+                        hair: hair_val,
+                        clothing: cloth_prob,
+                        background: (1.0 - fg_prob).clamp(0.0, 1.0),
                     };
                 }
             });
     } else {
         raw_grid
             .par_chunks_mut(MASK_DIM)
+            .zip(raw_fg.par_chunks_mut(MASK_DIM))
+            .zip(raw_hair.par_chunks_mut(MASK_DIM))
+            .zip(raw_solid.par_chunks_mut(MASK_DIM))
             .enumerate()
-            .for_each(|(y, row)| {
-                let ny = y as f32 / MASK_DIM as f32;
+            .for_each(|(y, (((row, fg_row), hair_row), solid_row))| {
+                let ny = y as f32 / (MASK_DIM - 1) as f32;
                 for x in 0..MASK_DIM {
-                    let nx = x as f32 / MASK_DIM as f32;
-                    row[x] = compute_geometric_weights(nx, ny, face);
+                    let nx = x as f32 / (MASK_DIM - 1) as f32;
+                    let w = compute_geometric_weights(nx, ny, face);
+                    let geo_fg = (1.0 - w.background).clamp(0.0, 1.0);
+                    let lower_body_fg = if ny > face.chin_y {
+                        let half_w = (face.face_rx * 2.8).clamp(0.18, 0.46);
+                        let dx = ((nx - face.center_x).abs() - half_w).max(0.0);
+                        let h_weight = (1.0 - dx / 0.12).clamp(0.0, 1.0);
+                        let v_weight = (1.0 - ((ny - face.chin_y) / (1.0 - face.chin_y + 0.01)).clamp(0.0, 1.0) * 0.35)
+                            .clamp(0.0, 1.0);
+                        h_weight * v_weight * 0.82
+                    } else {
+                        0.0
+                    };
+                    let fg = geo_fg.max(lower_body_fg);
+                    fg_row[x] = fg;
+                    hair_row[x] = w.hair;
+                    solid_row[x] = (fg * (1.0 - w.hair * 0.85)).clamp(0.0, 1.0);
+                    row[x] = w;
                 }
             });
     }
 
-    // Separable 7-tap box blur on the 512x512 SemanticWeights grid for silky-smooth feathering without label crosstalk
-    let rad: isize = 3;
+    // Separable 5-tap box blur on anatomical retouch weights (keeps raw_fg unblurred for Guided Filter)
+    let rad: isize = 2;
     let mut temp = vec![SemanticWeights::default(); MASK_DIM * MASK_DIM];
     temp.par_chunks_mut(MASK_DIM)
         .enumerate()
@@ -928,6 +1235,8 @@ fn build_semantic_grid(mask_img: Option<&RgbaImage>, face: &FaceRegion) -> Vec<S
                 let skin = (acc.skin * inv * (1.0 - feature_guard)).clamp(0.0, 1.0);
                 let under_eye = (acc.under_eye * inv * (1.0 - (eye * 2.5).min(1.0))).clamp(0.0, 1.0);
                 let eyeshadow = (acc.eyeshadow * inv * (1.0 - (eye * 2.5).min(1.0)) * (1.0 - (eyebrow * 1.8).min(1.0))).clamp(0.0, 1.0);
+                let clothing = (acc.clothing * inv * (1.0 - skin * 0.6)).clamp(0.0, 1.0);
+                let hair = (acc.hair * inv * (1.0 - skin * 0.8)).clamp(0.0, 1.0);
 
                 row_out[x] = SemanticWeights {
                     skin,
@@ -940,14 +1249,20 @@ fn build_semantic_grid(mask_img: Option<&RgbaImage>, face: &FaceRegion) -> Vec<S
                     eye,
                     lips_outer,
                     teeth_inner,
-                    hair: acc.hair * inv * (1.0 - skin * 0.8),
-                    clothing: acc.clothing * inv * (1.0 - skin * 0.6),
-                    background: acc.background * inv * (1.0 - skin),
+                    hair,
+                    clothing,
+                    background: (acc.background * inv * (1.0 - skin) * (1.0 - clothing * 0.9)).clamp(0.0, 1.0),
                 };
             }
         });
 
-    final_grid
+    SemanticData {
+        weights: final_grid,
+        raw_fg,
+        raw_hair,
+        raw_solid,
+        has_neural_scene,
+    }
 }
 
 #[inline]
@@ -1410,6 +1725,1358 @@ fn sample_bilinear(buf: &[f32], w: usize, h: usize, fx: f32, fy: f32) -> (f32, f
     (out[0], out[1], out[2])
 }
 
+#[inline]
+fn sample_plane_bilinear(plane: &[f32], w: usize, h: usize, nx: f32, ny: f32) -> f32 {
+    if plane.is_empty() || w == 0 || h == 0 {
+        return 0.0;
+    }
+    let fx = (nx * w as f32 - 0.5).clamp(0.0, (w - 1) as f32);
+    let fy = (ny * h as f32 - 0.5).clamp(0.0, (h - 1) as f32);
+    let x0 = fx.floor() as usize;
+    let y0 = fy.floor() as usize;
+    let x1 = (x0 + 1).min(w - 1);
+    let y1 = (y0 + 1).min(h - 1);
+    let dx = fx - x0 as f32;
+    let dy = fy - y0 as f32;
+    let top = plane[y0 * w + x0] * (1.0 - dx) + plane[y0 * w + x1] * dx;
+    let bot = plane[y1 * w + x0] * (1.0 - dx) + plane[y1 * w + x1] * dx;
+    top * (1.0 - dy) + bot * dy
+}
+
+#[inline]
+fn sample_alpha_unit(buf: &[f32], w: usize, h: usize, fx: f32, fy: f32) -> f32 {
+    if buf.is_empty() || w == 0 || h == 0 {
+        return 1.0;
+    }
+    let x = fx.clamp(0.0, (w - 1) as f32);
+    let y = fy.clamp(0.0, (h - 1) as f32);
+    let x0 = x.floor() as usize;
+    let y0 = y.floor() as usize;
+    let x1 = (x0 + 1).min(w - 1);
+    let y1 = (y0 + 1).min(h - 1);
+    let dx = x - x0 as f32;
+    let dy = y - y0 as f32;
+    let top = buf[y0 * w + x0] * (1.0 - dx) + buf[y0 * w + x1] * dx;
+    let bot = buf[y1 * w + x0] * (1.0 - dx) + buf[y1 * w + x1] * dx;
+    top * (1.0 - dy) + bot * dy
+}
+
+fn box_filter_plane(src: &[f32], w: usize, h: usize, radius: usize) -> Vec<f32> {
+    if radius == 0 || w == 0 || h == 0 {
+        return src.to_vec();
+    }
+    let r = radius as isize;
+    let mut temp = vec![0.0f32; w * h];
+    temp.par_chunks_mut(w).enumerate().for_each(|(y, row_out)| {
+        let row_in = &src[y * w..(y + 1) * w];
+        let mut pref = Vec::with_capacity(w + 1);
+        pref.push(0.0f64);
+        let mut acc = 0.0f64;
+        for &v in row_in {
+            acc += v as f64;
+            pref.push(acc);
+        }
+        for x in 0..w {
+            let x0 = (x as isize - r).max(0) as usize;
+            let x1 = (x as isize + r).min(w as isize - 1) as usize;
+            row_out[x] = ((pref[x1 + 1] - pref[x0]) / (x1 - x0 + 1) as f64) as f32;
+        }
+    });
+
+    let mut trans = vec![0.0f32; w * h];
+    trans.par_chunks_mut(h).enumerate().for_each(|(x, col_out)| {
+        for y in 0..h {
+            col_out[y] = temp[y * w + x];
+        }
+    });
+
+    let mut trans_blur = vec![0.0f32; w * h];
+    trans_blur.par_chunks_mut(h).enumerate().for_each(|(x, col_out)| {
+        let col_in = &trans[x * h..(x + 1) * h];
+        let mut pref = Vec::with_capacity(h + 1);
+        pref.push(0.0f64);
+        let mut acc = 0.0f64;
+        for &v in col_in {
+            acc += v as f64;
+            pref.push(acc);
+        }
+        for y in 0..h {
+            let y0 = (y as isize - r).max(0) as usize;
+            let y1 = (y as isize + r).min(h as isize - 1) as usize;
+            col_out[y] = ((pref[y1 + 1] - pref[y0]) / (y1 - y0 + 1) as f64) as f32;
+        }
+    });
+
+    let mut dst = vec![0.0f32; w * h];
+    dst.par_chunks_mut(w).enumerate().for_each(|(y, row_out)| {
+        for x in 0..w {
+            row_out[x] = trans_blur[x * h + y];
+        }
+    });
+    dst
+}
+
+fn morph_min_max_plane(src: &[f32], w: usize, h: usize, radius: usize) -> (Vec<f32>, Vec<f32>) {
+    if radius == 0 || w == 0 || h == 0 {
+        return (src.to_vec(), src.to_vec());
+    }
+    let r = radius as isize;
+    let mut t_min = vec![0.0f32; w * h];
+    let mut t_max = vec![0.0f32; w * h];
+
+    t_min
+        .par_chunks_mut(w)
+        .zip(t_max.par_chunks_mut(w))
+        .enumerate()
+        .for_each(|(y, (row_min, row_max))| {
+            let row_in = &src[y * w..(y + 1) * w];
+            for x in 0..w {
+                let x0 = (x as isize - r).max(0) as usize;
+                let x1 = (x as isize + r).min(w as isize - 1) as usize;
+                let mut mn = 1.0f32;
+                let mut mx = 0.0f32;
+                for &v in &row_in[x0..=x1] {
+                    if v < mn { mn = v; }
+                    if v > mx { mx = v; }
+                }
+                row_min[x] = mn;
+                row_max[x] = mx;
+            }
+        });
+
+    let mut d_min = vec![0.0f32; w * h];
+    let mut d_max = vec![0.0f32; w * h];
+    d_min
+        .par_chunks_mut(w)
+        .zip(d_max.par_chunks_mut(w))
+        .enumerate()
+        .for_each(|(y, (row_min, row_max))| {
+            let y0 = (y as isize - r).max(0) as usize;
+            let y1 = (y as isize + r).min(h as isize - 1) as usize;
+            for x in 0..w {
+                let mut mn = 1.0f32;
+                let mut mx = 0.0f32;
+                for iy in y0..=y1 {
+                    let v0 = t_min[iy * w + x];
+                    let v1 = t_max[iy * w + x];
+                    if v0 < mn { mn = v0; }
+                    if v1 > mx { mx = v1; }
+                }
+                row_min[x] = mn;
+                row_max[x] = mx;
+            }
+        });
+
+    (d_min, d_max)
+}
+
+struct GuidedMatteResult {
+    fg_alpha: Vec<f32>,
+    f_local: Vec<f32>,
+    b_local: Vec<f32>,
+    gw: usize,
+    gh: usize,
+}
+
+fn compute_guided_matte(
+    base_rgb: &[f32],
+    w: usize,
+    h: usize,
+    semantic: &SemanticData,
+    params: &RetouchParams,
+    need_decontam: bool,
+) -> GuidedMatteResult {
+    let max_guide = 1024usize;
+    let (gw, gh) = if w.max(h) > max_guide {
+        let scale = max_guide as f32 / w.max(h) as f32;
+        (
+            ((w as f32 * scale).round() as usize).max(32),
+            ((h as f32 * scale).round() as usize).max(32),
+        )
+    } else {
+        (w, h)
+    };
+    let n = gw * gh;
+
+    let mut ir = vec![0.0f32; n];
+    let mut ig = vec![0.0f32; n];
+    let mut ib = vec![0.0f32; n];
+    let mut p_fg = vec![0.0f32; n];
+    let mut p_solid = vec![0.0f32; n];
+    let mut p_hair = vec![0.0f32; n];
+    let is_subject_only = params.bg_keep_scope == "subject_only";
+    let is_portrait_focus = params.bg_keep_scope == "portrait_focus";
+    let face = &params.face;
+
+    ir.par_chunks_mut(gw)
+        .zip(ig.par_chunks_mut(gw))
+        .zip(ib.par_chunks_mut(gw))
+        .zip(p_fg.par_chunks_mut(gw))
+        .zip(p_solid.par_chunks_mut(gw))
+        .zip(p_hair.par_chunks_mut(gw))
+        .enumerate()
+        .for_each(|(y, (((((rr, rg), rb), rp), rsol), rhair))| {
+            let ny = (y as f32 + 0.5) / gh as f32;
+            let sy = (ny * h as f32 - 0.5).clamp(0.0, (h - 1) as f32);
+            for x in 0..gw {
+                let nx = (x as f32 + 0.5) / gw as f32;
+                let sx = (nx * w as f32 - 0.5).clamp(0.0, (w - 1) as f32);
+                let (cr, cg, cb) = sample_bilinear(base_rgb, w, h, sx, sy);
+                rr[x] = cr;
+                rg[x] = cg;
+                rb[x] = cb;
+                let mut raw = sample_plane_bilinear(&semantic.raw_fg, MASK_DIM, MASK_DIM, nx, ny).clamp(0.0, 1.0);
+                if is_subject_only {
+                    raw = raw.powf(1.22);
+                } else if is_portrait_focus {
+                    let rx = face.face_rx.max(0.12) * 3.8;
+                    let dx = ((nx - face.center_x) / rx).abs();
+                    let vert = ((ny - (face.chin_y + face.face_ry * 3.6)).max(0.0) * 2.2).clamp(0.0, 1.0);
+                    let env = (1.0 - smoothstep(0.65, 1.25, dx) * 0.65 - vert * 0.45).clamp(0.0, 1.0);
+                    raw *= env;
+                }
+                rp[x] = raw;
+                rsol[x] = sample_plane_bilinear(&semantic.raw_solid, MASK_DIM, MASK_DIM, nx, ny).clamp(0.0, 1.0);
+                rhair[x] = sample_plane_bilinear(&semantic.raw_hair, MASK_DIM, MASK_DIM, nx, ny).clamp(0.0, 1.0);
+            }
+        });
+
+    if need_decontam && gw >= 32 && gh >= 32 {
+        // Rescue enclosed lower-body holes (e.g. pale hands/fingers tucked inside folded arms)
+        // while keeping genuine open background gaps and hair/neck wall pockets open.
+        let rw = 128usize;
+        let rh = 128usize;
+        let rn = rw * rh;
+        let mut fg_r = vec![0.0f32; rn];
+        let mut hair_r = vec![0.0f32; rn];
+        let mut rr_r = vec![0.0f32; rn];
+        let mut rg_r = vec![0.0f32; rn];
+        let mut rb_r = vec![0.0f32; rn];
+        let mut wall_acc = [0.0f64; 4];
+
+        for cy in 0..rh {
+            let ny = (cy as f32 + 0.5) / rh as f32;
+            let gy_i = ((ny * gh as f32).floor() as usize).min(gh - 1);
+            for cx in 0..rw {
+                let nx = (cx as f32 + 0.5) / rw as f32;
+                let gx_i = ((nx * gw as f32).floor() as usize).min(gw - 1);
+                let gi = gy_i * gw + gx_i;
+                let ci = cy * rw + cx;
+                let fv = p_fg[gi];
+                fg_r[ci] = fv;
+                hair_r[ci] = p_hair[gi];
+                rr_r[ci] = ir[gi];
+                rg_r[ci] = ig[gi];
+                rb_r[ci] = ib[gi];
+                if fv < 0.15 {
+                    wall_acc[0] += ir[gi] as f64;
+                    wall_acc[1] += ig[gi] as f64;
+                    wall_acc[2] += ib[gi] as f64;
+                    wall_acc[3] += 1.0;
+                }
+            }
+        }
+
+        if wall_acc[3] > 10.0 {
+            let wr = (wall_acc[0] / wall_acc[3]) as f32;
+            let wg = (wall_acc[1] / wall_acc[3]) as f32;
+            let wb = (wall_acc[2] / wall_acc[3]) as f32;
+
+            let mut open_bg = vec![false; rn];
+            let mut q: std::collections::VecDeque<usize> = std::collections::VecDeque::new();
+            for cy in 0..rh {
+                for cx in 0..rw {
+                    let is_outer = cx == 0 || cx == rw - 1 || cy == 0;
+                    let is_bottom_wall = if cy == rh - 1 {
+                        let ci = cy * rw + cx;
+                        let dr = rr_r[ci] - wr;
+                        let dg = rg_r[ci] - wg;
+                        let db = rb_r[ci] - wb;
+                        fg_r[ci] < 0.35 && (dr * dr + dg * dg + db * db).sqrt() < 0.14
+                    } else {
+                        false
+                    };
+                    if is_outer || is_bottom_wall {
+                        let ci = cy * rw + cx;
+                        if fg_r[ci] < 0.55 && !open_bg[ci] {
+                            open_bg[ci] = true;
+                            q.push_back(ci);
+                        }
+                    }
+                }
+            }
+            while let Some(ci) = q.pop_front() {
+                let cx = ci % rw;
+                let cy = ci / rw;
+                for (nx_i, ny_i) in [
+                    (cx.wrapping_sub(1), cy),
+                    (cx + 1, cy),
+                    (cx, cy.wrapping_sub(1)),
+                    (cx, cy + 1),
+                ] {
+                    if nx_i < rw && ny_i < rh {
+                        let ni = ny_i * rw + nx_i;
+                        if !open_bg[ni] && fg_r[ni] < 0.55 {
+                            open_bg[ni] = true;
+                            q.push_back(ni);
+                        }
+                    }
+                }
+            }
+
+            // Diffuse open outer background pixels onto a 64x64 grid so top-to-bottom lighting
+            // falloff is preserved when evaluating enclosed torso gaps (never polluted by enclosed holes).
+            let ww = 64usize;
+            let wh = 64usize;
+            let wn = ww * wh;
+            let mut lw_r = vec![0.0f32; wn];
+            let mut lw_g = vec![0.0f32; wn];
+            let mut lw_b = vec![0.0f32; wn];
+            let mut lw_w = vec![0.0f32; wn];
+            for cy in 0..rh {
+                let ly = (cy * wh) / rh;
+                for cx in 0..rw {
+                    let ci = cy * rw + cx;
+                    if open_bg[ci] && fg_r[ci] < 0.15 {
+                        let lx = (cx * ww) / rw;
+                        let li = ly * ww + lx;
+                        lw_r[li] += rr_r[ci];
+                        lw_g[li] += rg_r[ci];
+                        lw_b[li] += rb_r[ci];
+                        lw_w[li] += 1.0;
+                    }
+                }
+            }
+            for _ in 0..3 {
+                lw_r = box_filter_plane(&lw_r, ww, wh, 10);
+                lw_g = box_filter_plane(&lw_g, ww, wh, 10);
+                lw_b = box_filter_plane(&lw_b, ww, wh, 10);
+                lw_w = box_filter_plane(&lw_w, ww, wh, 10);
+            }
+            let mut wall_local_r = vec![wr; wn];
+            let mut wall_local_g = vec![wg; wn];
+            let mut wall_local_b = vec![wb; wn];
+            for i in 0..wn {
+                let d = lw_w[i];
+                if d > 1e-5 {
+                    wall_local_r[i] = (lw_r[i] / d).clamp(0.0, 1.0);
+                    wall_local_g[i] = (lw_g[i] / d).clamp(0.0, 1.0);
+                    wall_local_b[i] = (lw_b[i] / d).clamp(0.0, 1.0);
+                }
+            }
+
+            let mut visited = vec![false; rn];
+            let mut rescue_r = vec![0.0f32; rn];
+            let mut punch_bg = vec![0.0f32; rn];
+            let lower_y = (face.chin_y + face.face_ry * 0.22).clamp(0.18, 0.85);
+
+            let is_candidate_pocket = |ci: usize| -> bool {
+                if open_bg[ci] { return false; }
+                if fg_r[ci] < 0.62 { return true; }
+                let cx = ci % rw;
+                let cy = ci / rw;
+                let nx_w = (cx as f32 + 0.5) / rw as f32;
+                let ny_w = (cy as f32 + 0.5) / rh as f32;
+                let wlr = sample_plane_bilinear(&wall_local_r, ww, wh, nx_w, ny_w);
+                let wlg = sample_plane_bilinear(&wall_local_g, ww, wh, nx_w, ny_w);
+                let wlb = sample_plane_bilinear(&wall_local_b, ww, wh, nx_w, ny_w);
+                let dr = rr_r[ci] - wlr;
+                let dg = rg_r[ci] - wlg;
+                let db = rb_r[ci] - wlb;
+                let dist = (dr * dr + dg * dg + db * db).sqrt();
+                let warm_diff = (rr_r[ci] - rb_r[ci]) - (wlr - wlb);
+                dist < 0.12 && warm_diff <= 0.045
+            };
+
+            for start in 0..rn {
+                if visited[start] || !is_candidate_pocket(start) {
+                    continue;
+                }
+                let mut comp: Vec<usize> = Vec::new();
+                let mut cq: std::collections::VecDeque<usize> = std::collections::VecDeque::new();
+                visited[start] = true;
+                cq.push_back(start);
+                let mut ny_sum = 0.0f32;
+                let mut hair_sum = 0.0f32;
+                let mut non_wall_cnt = 0usize;
+                let mut wall_cnt = 0usize;
+                let mut warm_skin_cnt = 0usize;
+                let mut edge_cnt = 0usize;
+                let mut adj_hair_hits = 0usize;
+                let mut adj_total = 0usize;
+
+                while let Some(ci) = cq.pop_front() {
+                    comp.push(ci);
+                    let cx = ci % rw;
+                    let cy = ci / rw;
+                    let nx_w = (cx as f32 + 0.5) / rw as f32;
+                    let ny_w = (cy as f32 + 0.5) / rh as f32;
+                    ny_sum += ny_w;
+                    hair_sum += hair_r[ci];
+                    let wlr = sample_plane_bilinear(&wall_local_r, ww, wh, nx_w, ny_w);
+                    let wlg = sample_plane_bilinear(&wall_local_g, ww, wh, nx_w, ny_w);
+                    let wlb = sample_plane_bilinear(&wall_local_b, ww, wh, nx_w, ny_w);
+                    let dr = rr_r[ci] - wlr;
+                    let dg = rg_r[ci] - wlg;
+                    let db = rb_r[ci] - wlb;
+                    let dist = (dr * dr + dg * dg + db * db).sqrt();
+                    let w_norm2 = wlr * wlr + wlg * wlg + wlb * wlb;
+                    let proj = if w_norm2 > 1e-4 {
+                        ((rr_r[ci] * wlr + rg_r[ci] * wlg + rb_r[ci] * wlb) / w_norm2).clamp(0.68, 1.12)
+                    } else {
+                        1.0
+                    };
+                    let sr = rr_r[ci] - proj * wlr;
+                    let sg = rg_r[ci] - proj * wlg;
+                    let sb = rb_r[ci] - proj * wlb;
+                    let shadow_chroma_dist = (sr * sr + sg * sg + sb * sb).sqrt();
+                    let is_shaded_wall =
+                        w_norm2 > 0.04 && proj > 0.69 && proj < 1.11 && shadow_chroma_dist < 0.035;
+
+                    let warm_diff = (rr_r[ci] - rb_r[ci]) - (wlr - wlb);
+                    let is_warm_skin = warm_diff > 0.045 && dist > 0.04;
+                    if is_warm_skin {
+                        warm_skin_cnt += 1;
+                    }
+
+                    if dist <= 0.12 || is_shaded_wall {
+                        if !is_warm_skin {
+                            wall_cnt += 1;
+                        } else {
+                            non_wall_cnt += 1;
+                        }
+                    } else {
+                        non_wall_cnt += 1;
+                    }
+
+                    let mut has_internal_edge = false;
+                    for (ex, ey) in [(cx + 1, cy), (cx, cy + 1)] {
+                        if ex < rw && ey < rh {
+                            let ei = ey * rw + ex;
+                            if is_candidate_pocket(ei) {
+                                let ed = (rr_r[ci] - rr_r[ei])
+                                    .abs()
+                                    .max((rg_r[ci] - rg_r[ei]).abs())
+                                    .max((rb_r[ci] - rb_r[ei]).abs());
+                                if ed > 0.08 {
+                                    has_internal_edge = true;
+                                }
+                            }
+                        }
+                    }
+                    if has_internal_edge {
+                        edge_cnt += 1;
+                    }
+
+                    for (nx_i, ny_i) in [
+                        (cx.wrapping_sub(1), cy),
+                        (cx + 1, cy),
+                        (cx, cy.wrapping_sub(1)),
+                        (cx, cy + 1),
+                    ] {
+                        if nx_i < rw && ny_i < rh {
+                            let ni = ny_i * rw + nx_i;
+                            if is_candidate_pocket(ni) && !visited[ni] {
+                                visited[ni] = true;
+                                cq.push_back(ni);
+                            } else if open_bg[ni] || fg_r[ni] >= 0.62 {
+                                adj_total += 1;
+                                if hair_r[ni] > 0.25 {
+                                    adj_hair_hits += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                let len = comp.len().max(1);
+                let mean_ny = ny_sum / len as f32;
+                let mean_hair = hair_sum / len as f32;
+                let non_wall_frac = non_wall_cnt as f32 / len as f32;
+                let wall_frac = wall_cnt as f32 / len as f32;
+                let warm_skin_frac = warm_skin_cnt as f32 / len as f32;
+                let edge_frac = edge_cnt as f32 / len as f32;
+                let adj_hair_frac = if adj_total > 0 { adj_hair_hits as f32 / adj_total as f32 } else { 0.0 };
+
+                // 1. Folded arms / tucked fingers / skin rescue has PRIORITY when warm skin is present
+                if mean_ny > lower_y
+                    && mean_hair < 0.18
+                    && adj_hair_frac < 0.12
+                    && len <= 320
+                    && (warm_skin_frac > 0.25
+                        || non_wall_frac > 0.45
+                        || (len <= 90 && edge_frac > 0.25 && non_wall_frac > 0.20))
+                {
+                    for &ci in &comp {
+                        rescue_r[ci] = 1.0;
+                    }
+                }
+                // 2. Enclosed studio wall pocket / cavity punching (e.g. gap between arm and waist or between legs)
+                else if wall_frac > 0.65
+                    && warm_skin_frac < 0.15
+                    && mean_hair < 0.20
+                    && adj_hair_frac < 0.18
+                    && edge_frac < 0.40
+                {
+                    for &ci in &comp {
+                        punch_bg[ci] = 1.0;
+                    }
+                }
+            }
+
+            if punch_bg.iter().any(|&v| v > 0.5) {
+                let punch_soft = box_filter_plane(&punch_bg, rw, rh, 1);
+                p_fg.par_chunks_mut(gw)
+                    .zip(p_solid.par_chunks_mut(gw))
+                    .enumerate()
+                    .for_each(|(y, (rp, rsol))| {
+                        let ny = (y as f32 + 0.5) / gh as f32;
+                        for x in 0..gw {
+                            let nx = (x as f32 + 0.5) / gw as f32;
+                            let pv = sample_plane_bilinear(&punch_soft, rw, rh, nx, ny);
+                            if pv > 0.10 {
+                                let k = ((pv - 0.10) / 0.50).clamp(0.0, 1.0);
+                                rp[x] *= 1.0 - k;
+                                rsol[x] *= 1.0 - k;
+                            }
+                        }
+                    });
+            }
+
+            if rescue_r.iter().any(|&v| v > 0.5) {
+                let rescue_soft = box_filter_plane(&rescue_r, rw, rh, 1);
+                p_fg.par_chunks_mut(gw)
+                    .zip(p_solid.par_chunks_mut(gw))
+                    .enumerate()
+                    .for_each(|(y, (rp, rsol))| {
+                        let ny = (y as f32 + 0.5) / gh as f32;
+                        for x in 0..gw {
+                            let nx = (x as f32 + 0.5) / gw as f32;
+                            let rv = (sample_plane_bilinear(&rescue_soft, rw, rh, nx, ny) * 1.35).clamp(0.0, 1.0);
+                            if rv > 0.08 {
+                                rp[x] = rp[x].max(rv);
+                                rsol[x] = rsol[x].max(rv);
+                            }
+                        }
+                    });
+            }
+        }
+    }
+
+    let edge_adj_norm = (params.bg_edge_adjust / 100.0).clamp(-1.0, 1.0);
+    let r_adj = if edge_adj_norm.abs() > 0.06 {
+        ((edge_adj_norm.abs() * (gw.min(gh) as f32 * 0.011)).round() as usize).clamp(1, 8)
+    } else {
+        0
+    };
+    let (p_adj_min, p_adj_max) = if r_adj > 0 {
+        morph_min_max_plane(&p_fg, gw, gh, r_adj)
+    } else {
+        (Vec::new(), Vec::new())
+    };
+    if r_adj > 0 {
+        let blend = edge_adj_norm.abs().clamp(0.0, 1.0);
+        if edge_adj_norm < 0.0 {
+            for i in 0..n {
+                p_fg[i] = p_fg[i] * (1.0 - blend) + p_adj_min[i] * blend;
+            }
+        } else {
+            for i in 0..n {
+                p_fg[i] = p_fg[i] * (1.0 - blend) + p_adj_max[i] * blend;
+            }
+        }
+    }
+
+    let r_tri = ((gw.min(gh) as f32) * 0.0065).round().clamp(2.0, 6.0) as usize;
+    let (p_min, p_max) = morph_min_max_plane(&p_fg, gw, gh, r_tri);
+
+    let r_guide = ((gw.min(gh) as f32) * 0.0055).round().clamp(2.0, 6.0) as usize;
+    let eps = 0.00055f32;
+
+    let mean_r = box_filter_plane(&ir, gw, gh, r_guide);
+    let mean_g = box_filter_plane(&ig, gw, gh, r_guide);
+    let mean_b = box_filter_plane(&ib, gw, gh, r_guide);
+    let mean_p = box_filter_plane(&p_fg, gw, gh, r_guide);
+
+    let mul = |a: &[f32], b: &[f32]| -> Vec<f32> {
+        a.par_iter().zip(b.par_iter()).map(|(&x, &y)| x * y).collect()
+    };
+
+    let mean_rr = box_filter_plane(&mul(&ir, &ir), gw, gh, r_guide);
+    let mean_rg = box_filter_plane(&mul(&ir, &ig), gw, gh, r_guide);
+    let mean_rb = box_filter_plane(&mul(&ir, &ib), gw, gh, r_guide);
+    let mean_gg = box_filter_plane(&mul(&ig, &ig), gw, gh, r_guide);
+    let mean_gb = box_filter_plane(&mul(&ig, &ib), gw, gh, r_guide);
+    let mean_bb = box_filter_plane(&mul(&ib, &ib), gw, gh, r_guide);
+
+    let mean_rp = box_filter_plane(&mul(&ir, &p_fg), gw, gh, r_guide);
+    let mean_gp = box_filter_plane(&mul(&ig, &p_fg), gw, gh, r_guide);
+    let mean_bp = box_filter_plane(&mul(&ib, &p_fg), gw, gh, r_guide);
+
+    let mut ar_buf = vec![0.0f32; n];
+    let mut ag_buf = vec![0.0f32; n];
+    let mut ab_buf = vec![0.0f32; n];
+    let mut b_buf = vec![0.0f32; n];
+
+    ar_buf
+        .par_iter_mut()
+        .zip(ag_buf.par_iter_mut())
+        .zip(ab_buf.par_iter_mut())
+        .zip(b_buf.par_iter_mut())
+        .enumerate()
+        .for_each(|(i, (((ar_o, ag_o), ab_o), b_o))| {
+            let mr = mean_r[i];
+            let mg = mean_g[i];
+            let mb = mean_b[i];
+            let mp = mean_p[i];
+
+            let s00 = (mean_rr[i] - mr * mr + eps).max(eps);
+            let s01 = mean_rg[i] - mr * mg;
+            let s02 = mean_rb[i] - mr * mb;
+            let s11 = (mean_gg[i] - mg * mg + eps).max(eps);
+            let s12 = mean_gb[i] - mg * mb;
+            let s22 = (mean_bb[i] - mb * mb + eps).max(eps);
+
+            let cr = mean_rp[i] - mr * mp;
+            let cg = mean_gp[i] - mg * mp;
+            let cb = mean_bp[i] - mb * mp;
+
+            let c00 = s11 * s22 - s12 * s12;
+            let c01 = s02 * s12 - s01 * s22;
+            let c02 = s01 * s12 - s02 * s11;
+            let c11 = s00 * s22 - s02 * s02;
+            let c12 = s01 * s02 - s00 * s12;
+            let c22 = s00 * s11 - s01 * s01;
+            let det = (s00 * c00 + s01 * c01 + s02 * c02).max(1e-10);
+
+            let ar = (c00 * cr + c01 * cg + c02 * cb) / det;
+            let ag = (c01 * cr + c11 * cg + c12 * cb) / det;
+            let ab = (c02 * cr + c12 * cg + c22 * cb) / det;
+            let bc = mp - (ar * mr + ag * mg + ab * mb);
+
+            *ar_o = ar;
+            *ag_o = ag;
+            *ab_o = ab;
+            *b_o = bc;
+        });
+
+    let mean_ar = box_filter_plane(&ar_buf, gw, gh, r_guide);
+    let mean_ag = box_filter_plane(&ag_buf, gw, gh, r_guide);
+    let mean_ab = box_filter_plane(&ab_buf, gw, gh, r_guide);
+    let mean_bc = box_filter_plane(&b_buf, gw, gh, r_guide);
+
+    let r_strand = ((gw.min(gh) as f32) * 0.011).round().clamp(3.0, 11.0) as usize;
+    let hair_env = box_filter_plane(&p_hair, gw, gh, r_strand);
+
+    let (f_local, b_local, f_w, b_w) = if need_decontam {
+        let q_guide: Vec<f32> = (0..n)
+            .into_par_iter()
+            .map(|i| {
+                let q = (mean_ar[i] * ir[i] + mean_ag[i] * ig[i] + mean_ab[i] * ib[i] + mean_bc[i]).clamp(0.0, 1.0);
+                let t_fg = smoothstep(0.88, 0.98, p_min[i]);
+                let t_bg = smoothstep(0.04, 0.16, p_max[i]);
+                ((q * (1.0 - t_fg) + t_fg) * t_bg).clamp(0.0, 1.0)
+            })
+            .collect();
+
+        let r_col_fg = ((gw.min(gh) as f32) * 0.009).round().clamp(3.0, 9.0) as usize;
+        let r_col_bg = ((gw.min(gh) as f32) * 0.013).round().clamp(4.0, 12.0) as usize;
+        let r_col_hair = ((gw.min(gh) as f32) * 0.012).round().clamp(4.0, 13.0) as usize;
+        let diffuse_weighted_rgb = |w_map: &[f32], r_col: usize| -> (Vec<f32>, Vec<f32>) {
+            let mut wr = mul(&ir, w_map);
+            let mut wg = mul(&ig, w_map);
+            let mut wb = mul(&ib, w_map);
+            let mut ww = w_map.to_vec();
+            for _ in 0..2 {
+                wr = box_filter_plane(&wr, gw, gh, r_col);
+                wg = box_filter_plane(&wg, gw, gh, r_col);
+                wb = box_filter_plane(&wb, gw, gh, r_col);
+                ww = box_filter_plane(&ww, gw, gh, r_col);
+            }
+            let mut out = vec![0.0f32; n * 3];
+            out.par_chunks_mut(3).enumerate().for_each(|(i, px)| {
+                let d = ww[i];
+                if d > 1e-4 {
+                    px[0] = (wr[i] / d).clamp(0.0, 1.0);
+                    px[1] = (wg[i] / d).clamp(0.0, 1.0);
+                    px[2] = (wb[i] / d).clamp(0.0, 1.0);
+                } else {
+                    px[0] = ir[i];
+                    px[1] = ig[i];
+                    px[2] = ib[i];
+                }
+            });
+            (out, ww)
+        };
+
+        let w_fg: Vec<f32> = q_guide.par_iter().map(|&q| (q - 0.85).max(0.0).powi(2)).collect();
+        let w_fg_hair: Vec<f32> = q_guide
+            .par_iter()
+            .zip(p_hair.par_iter())
+            .map(|(&q, &hp)| (q - 0.68).max(0.0).powi(2) * (hp - 0.10).max(0.0))
+            .collect();
+        let w_bg: Vec<f32> = q_guide.par_iter().map(|&q| (0.12 - q).max(0.0).powi(2)).collect();
+        let (mut fl, mut fw) = diffuse_weighted_rgb(&w_fg, r_col_fg);
+        let (fl_hair, fw_hair) = diffuse_weighted_rgb(&w_fg_hair, r_col_hair);
+        for i in 0..n {
+            let hair_presence = (hair_env[i] * 1.5 + p_hair[i] * 1.3).clamp(0.0, 1.0);
+            let hw = smoothstep(0.03, 0.16, hair_presence);
+            if fw_hair[i] > 1e-4 && hw > 0.01 {
+                let k = hw;
+                fl[i * 3] = fl[i * 3] * (1.0 - k) + fl_hair[i * 3] * k;
+                fl[i * 3 + 1] = fl[i * 3 + 1] * (1.0 - k) + fl_hair[i * 3 + 1] * k;
+                fl[i * 3 + 2] = fl[i * 3 + 2] * (1.0 - k) + fl_hair[i * 3 + 2] * k;
+                fw[i] = fw[i].max(fw_hair[i]);
+            }
+        }
+        let (mut bl, mut bw) = diffuse_weighted_rgb(&w_bg, r_col_bg);
+
+        // Coarse multi-scale fallback so enclosed hair/neck wall pockets get surrounding wall color
+        let cw = 64usize;
+        let ch = 64usize;
+        let cn = cw * ch;
+        let mut c_wr = vec![0.0f32; cn];
+        let mut c_wg = vec![0.0f32; cn];
+        let mut c_wb = vec![0.0f32; cn];
+        let mut c_ww = vec![0.0f32; cn];
+        for gy_i in 0..gh {
+            let cy = (gy_i * ch) / gh;
+            for gx_i in 0..gw {
+                let cx = (gx_i * cw) / gw;
+                let si = gy_i * gw + gx_i;
+                let ci = cy * cw + cx;
+                let w_v = w_bg[si];
+                if w_v > 0.0 {
+                    c_wr[ci] += ir[si] * w_v;
+                    c_wg[ci] += ig[si] * w_v;
+                    c_wb[ci] += ib[si] * w_v;
+                    c_ww[ci] += w_v;
+                }
+            }
+        }
+        for _ in 0..3 {
+            c_wr = box_filter_plane(&c_wr, cw, ch, 10);
+            c_wg = box_filter_plane(&c_wg, cw, ch, 10);
+            c_wb = box_filter_plane(&c_wb, cw, ch, 10);
+            c_ww = box_filter_plane(&c_ww, cw, ch, 10);
+        }
+        let mut c_rgb = vec![0.0f32; cn * 3];
+        for i in 0..cn {
+            let d = c_ww[i];
+            if d > 1e-6 {
+                c_rgb[i * 3] = (c_wr[i] / d).clamp(0.0, 1.0);
+                c_rgb[i * 3 + 1] = (c_wg[i] / d).clamp(0.0, 1.0);
+                c_rgb[i * 3 + 2] = (c_wb[i] / d).clamp(0.0, 1.0);
+            }
+        }
+        for gy_i in 0..gh {
+            let ny_c = (gy_i as f32 + 0.5) / gh as f32;
+            let cy_f = (ny_c * ch as f32 - 0.5).clamp(0.0, (ch - 1) as f32);
+            for gx_i in 0..gw {
+                let i = gy_i * gw + gx_i;
+                if bw[i] <= 1e-4 {
+                    let nx_c = (gx_i as f32 + 0.5) / gw as f32;
+                    let cx_f = (nx_c * cw as f32 - 0.5).clamp(0.0, (cw - 1) as f32);
+                    let cw_v = sample_plane_bilinear(&c_ww, cw, ch, nx_c, ny_c);
+                    if cw_v > 1e-6 {
+                        let (cr, cg, cb) = sample_bilinear(&c_rgb, cw, ch, cx_f, cy_f);
+                        bl[i * 3] = cr;
+                        bl[i * 3 + 1] = cg;
+                        bl[i * 3 + 2] = cb;
+                        bw[i] = 0.5;
+                    }
+                }
+            }
+        }
+        (fl, bl, fw, bw)
+    } else {
+        (Vec::new(), Vec::new(), Vec::new(), Vec::new())
+    };
+
+    let stray_cut = (params.stray_hair / 100.0).clamp(0.0, 1.0) * 0.22;
+    let adj_bias = -edge_adj_norm * 0.14;
+    let (solid_lo, solid_hi, hair_lo, hair_hi, hair_weight_scale) = match params.bg_edge_mode.as_str() {
+        "soft" => (
+            (0.22 + adj_bias).clamp(0.02, 0.74),
+            (0.80 + adj_bias).clamp(0.28, 0.99),
+            (0.04 + stray_cut * 0.5 + adj_bias).clamp(0.01, 0.70),
+            (0.88 + adj_bias).clamp(0.28, 0.99),
+            1.15f32,
+        ),
+        "crisp" => (
+            (0.48 + adj_bias).clamp(0.08, 0.84),
+            (0.62 + adj_bias).clamp(0.28, 0.96),
+            (0.18 + stray_cut + adj_bias).clamp(0.04, 0.76),
+            (0.74 + adj_bias).clamp(0.28, 0.98),
+            0.70f32,
+        ),
+        "hair_detail" => (
+            (0.36 + adj_bias).clamp(0.04, 0.76),
+            (0.66 + adj_bias).clamp(0.28, 0.96),
+            (0.03 + stray_cut * 0.4 + adj_bias).clamp(0.01, 0.68),
+            (0.76 + adj_bias).clamp(0.26, 0.98),
+            1.40f32,
+        ),
+        _ => (
+            (0.44 + adj_bias).clamp(0.05, 0.80),
+            (0.66 + adj_bias).clamp(0.28, 0.96),
+            (0.06 + stray_cut + adj_bias).clamp(0.01, 0.74),
+            (0.76 + adj_bias).clamp(0.28, 0.98),
+            1.15f32,
+        ),
+    };
+    let mut fg_alpha = vec![0.0f32; w * h];
+    fg_alpha.par_chunks_mut(w).enumerate().for_each(|(y, row_out)| {
+        let ny = (y as f32 + 0.5) / h as f32;
+        for x in 0..w {
+            let nx = (x as f32 + 0.5) / w as f32;
+            let idx = (y * w + x) * 3;
+            let r0 = base_rgb[idx];
+            let g0 = base_rgb[idx + 1];
+            let b0 = base_rgb[idx + 2];
+
+            let ar = sample_plane_bilinear(&mean_ar, gw, gh, nx, ny);
+            let ag = sample_plane_bilinear(&mean_ag, gw, gh, nx, ny);
+            let ab = sample_plane_bilinear(&mean_ab, gw, gh, nx, ny);
+            let bc = sample_plane_bilinear(&mean_bc, gw, gh, nx, ny);
+            let pmin = sample_plane_bilinear(&p_min, gw, gh, nx, ny);
+            let pmax = sample_plane_bilinear(&p_max, gw, gh, nx, ny);
+            let hair_p = sample_plane_bilinear(&p_hair, gw, gh, nx, ny);
+            let hair_e = sample_plane_bilinear(&hair_env, gw, gh, nx, ny);
+            let solid_p = sample_plane_bilinear(&p_solid, gw, gh, nx, ny);
+
+            let q = (ar * r0 + ag * g0 + ab * b0 + bc).clamp(0.0, 1.0);
+            let t_fg = smoothstep(0.88, 0.98, pmin);
+            let t_bg = smoothstep(0.04, 0.16, pmax);
+            let mut fg_raw = ((q * (1.0 - t_fg) + t_fg) * t_bg).clamp(0.0, 1.0);
+            let mut eff_hair_p = hair_p;
+
+            if !f_local.is_empty() && !b_local.is_empty() && pmin < 0.88 && solid_p < 0.65 {
+                let gx = ((nx * gw as f32) - 0.5).clamp(0.0, (gw - 1) as f32);
+                let gy = ((ny * gh as f32) - 0.5).clamp(0.0, (gh - 1) as f32);
+                let (fr, fg_c, fb) = sample_bilinear(&f_local, gw, gh, gx, gy);
+                let (br, bg_c, bb) = sample_bilinear(&b_local, gw, gh, gx, gy);
+                let fw_px = sample_plane_bilinear(&f_w, gw, gh, nx, ny);
+                let bw_px = sample_plane_bilinear(&b_w, gw, gh, nx, ny);
+                let vr = r0 - br;
+                let vg = g0 - bg_c;
+                let vb = b0 - bb;
+                let dist_bg = (vr * vr + vg * vg + vb * vb).sqrt();
+                let dr = fr - br;
+                let dg = fg_c - bg_c;
+                let db = fb - bb;
+                let df2 = dr * dr + dg * dg + db * db;
+                if df2 > 0.02 && fw_px > 1e-4 {
+                    let df_len = df2.sqrt();
+                    let rel_bg = dist_bg / df_len;
+                    let alpha_proj = ((vr * dr + vg * dg + vb * db) / df2).clamp(0.0, 1.0);
+                    let er = vr - alpha_proj * dr;
+                    let eg = vg - alpha_proj * dg;
+                    let eb = vb - alpha_proj * db;
+                    let line_err = (er * er + eg * eg + eb * eb).sqrt() / df_len;
+
+                    if df_len > 0.20
+                        && alpha_proj > 0.13
+                        && dist_bg > 0.11
+                        && hair_e > 0.025
+                        && params.bg_edge_mode != "crisp"
+                    {
+                        if hair_p > 0.12 && fg_raw > 0.04 {
+                            fg_raw = (fg_raw * 0.40 + alpha_proj * 0.60).clamp(0.0, 1.0);
+                        } else if line_err < 0.26 {
+                            let wisp_conf = smoothstep(0.025, 0.11, hair_e)
+                                * (1.0 - smoothstep(0.14, 0.26, line_err))
+                                * smoothstep(0.11, 0.24, alpha_proj);
+                            fg_raw = fg_raw.max(alpha_proj * wisp_conf);
+                            eff_hair_p = eff_hair_p.max(wisp_conf * 0.55);
+                        }
+                    }
+                    if solid_p < 0.58 && bw_px > 1e-4 && pmax > 0.02 {
+                        let near_bg_rel = 1.0 - smoothstep(0.06, 0.22, rel_bg);
+                        let near_bg_abs = 1.0 - smoothstep(0.035, 0.115, dist_bg);
+                        let low_solid = 1.0 - smoothstep(0.24, 0.58, solid_p);
+                        let kill_bg = near_bg_rel * near_bg_abs * low_solid;
+                        fg_raw *= 1.0 - kill_bg;
+                    }
+                } else if bw_px > 1e-4 && solid_p < 0.58 && fg_raw < 0.78 && pmax > 0.02 {
+                    let near_bg_abs = 1.0 - smoothstep(0.035, 0.11, dist_bg);
+                    let low_solid = 1.0 - smoothstep(0.24, 0.58, solid_p);
+                    let kill_bg = near_bg_abs * low_solid;
+                    fg_raw *= 1.0 - kill_bg;
+                }
+            }
+
+            let solid_a = smoothstep(solid_lo, solid_hi, fg_raw);
+            let hair_a = smoothstep(hair_lo, hair_hi, fg_raw);
+            let hair_w = (smoothstep(0.14, 0.44, eff_hair_p) * hair_weight_scale).clamp(0.0, 1.0);
+            row_out[x] = (solid_a * (1.0 - hair_w) + hair_a * hair_w).clamp(0.0, 1.0);
+        }
+    });
+
+    GuidedMatteResult {
+        fg_alpha,
+        f_local,
+        b_local,
+        gw,
+        gh,
+    }
+}
+
+fn compute_highres_direct_matte(
+    base_rgb: &[f32],
+    w: usize,
+    h: usize,
+    matte_img: &RgbaImage,
+    params: &RetouchParams,
+    need_decontam: bool,
+) -> GuidedMatteResult {
+    let mw = matte_img.width();
+    let mh = matte_img.height();
+    let same_dims = mw == w as u32 && mh == h as u32;
+    let is_subject_only = params.bg_keep_scope == "subject_only";
+    let is_portrait_focus = params.bg_keep_scope == "portrait_focus";
+    let face = &params.face;
+    let edge_adj_norm = (params.bg_edge_adjust / 100.0).clamp(-1.0, 1.0);
+
+    let mut fg_alpha = vec![0.0f32; w * h];
+    fg_alpha.par_chunks_mut(w).enumerate().for_each(|(y, row_out)| {
+        let ny = (y as f32 + 0.5) / h.max(1) as f32;
+        for x in 0..w {
+            let nx = (x as f32 + 0.5) / w.max(1) as f32;
+            let mut a = if same_dims {
+                matte_img.get_pixel(x as u32, y as u32)[0] as f32 / 255.0
+            } else {
+                sample_rgba_bilinear(matte_img, nx, ny)[0].clamp(0.0, 1.0)
+            };
+
+            if is_subject_only {
+                a = a.powf(1.22);
+            } else if is_portrait_focus {
+                let rx = face.face_rx.max(0.12) * 3.8;
+                let dx = ((nx - face.center_x) / rx).abs();
+                let vert = ((ny - (face.chin_y + face.face_ry * 3.6)).max(0.0) * 2.2).clamp(0.0, 1.0);
+                let env = (1.0 - smoothstep(0.65, 1.25, dx) * 0.65 - vert * 0.45).clamp(0.0, 1.0);
+                a *= env;
+            }
+
+            if edge_adj_norm.abs() > 0.01 {
+                if edge_adj_norm > 0.0 {
+                    a = (a + edge_adj_norm * 0.28 * smoothstep(0.02, 0.22, a)).clamp(0.0, 1.0);
+                } else {
+                    a = (a + edge_adj_norm * 0.28).clamp(0.0, 1.0);
+                }
+            }
+
+            a = match params.bg_edge_mode.as_str() {
+                "crisp" => smoothstep(0.28, 0.72, a),
+                "soft" => smoothstep(0.01, 0.94, a),
+                _ => {
+                    if a < 0.008 {
+                        0.0
+                    } else if a > 0.992 {
+                        1.0
+                    } else {
+                        a
+                    }
+                }
+            };
+            row_out[x] = a.clamp(0.0, 1.0);
+        }
+    });
+
+    let max_guide = 1024usize;
+    let (gw, gh) = if w.max(h) > max_guide {
+        let scale = max_guide as f32 / w.max(h) as f32;
+        (
+            ((w as f32 * scale).round() as usize).max(32),
+            ((h as f32 * scale).round() as usize).max(32),
+        )
+    } else {
+        (w, h)
+    };
+
+    let (f_local, b_local) = if need_decontam && gw >= 16 && gh >= 16 {
+        let n = gw * gh;
+        let mut ir = vec![0.0f32; n];
+        let mut ig = vec![0.0f32; n];
+        let mut ib = vec![0.0f32; n];
+        let mut w_fg = vec![0.0f32; n];
+        let mut w_bg = vec![0.0f32; n];
+
+        ir.par_chunks_mut(gw)
+            .zip(ig.par_chunks_mut(gw))
+            .zip(ib.par_chunks_mut(gw))
+            .zip(w_fg.par_chunks_mut(gw))
+            .zip(w_bg.par_chunks_mut(gw))
+            .enumerate()
+            .for_each(|(y, ((((rr, rg), rb), wf), wb))| {
+                let ny = (y as f32 + 0.5) / gh as f32;
+                let sy = (ny * h as f32 - 0.5).clamp(0.0, (h - 1) as f32);
+                for x in 0..gw {
+                    let nx = (x as f32 + 0.5) / gw as f32;
+                    let sx = (nx * w as f32 - 0.5).clamp(0.0, (w - 1) as f32);
+                    let (cr, cg, cb) = sample_bilinear(base_rgb, w, h, sx, sy);
+                    rr[x] = cr;
+                    rg[x] = cg;
+                    rb[x] = cb;
+                    let a = sample_alpha_unit(&fg_alpha, w, h, sx, sy);
+                    wf[x] = (a - 0.88).max(0.0).powi(2);
+                    wb[x] = (0.12 - a).max(0.0).powi(2);
+                }
+            });
+
+        let r_col_fg = ((gw.min(gh) as f32) * 0.009).round().clamp(3.0, 9.0) as usize;
+        let r_col_bg = ((gw.min(gh) as f32) * 0.013).round().clamp(4.0, 12.0) as usize;
+
+        let diffuse_weighted_rgb = |w_map: &[f32], r_col: usize| -> Vec<f32> {
+            let mut wr: Vec<f32> = ir.par_iter().zip(w_map.par_iter()).map(|(&c, &m)| c * m).collect();
+            let mut wg: Vec<f32> = ig.par_iter().zip(w_map.par_iter()).map(|(&c, &m)| c * m).collect();
+            let mut wb: Vec<f32> = ib.par_iter().zip(w_map.par_iter()).map(|(&c, &m)| c * m).collect();
+            let mut ww = w_map.to_vec();
+            for _ in 0..2 {
+                wr = box_filter_plane(&wr, gw, gh, r_col);
+                wg = box_filter_plane(&wg, gw, gh, r_col);
+                wb = box_filter_plane(&wb, gw, gh, r_col);
+                ww = box_filter_plane(&ww, gw, gh, r_col);
+            }
+            let mut out = vec![0.0f32; n * 3];
+            out.par_chunks_mut(3).enumerate().for_each(|(i, px)| {
+                let d = ww[i];
+                if d > 1e-4 {
+                    px[0] = (wr[i] / d).clamp(0.0, 1.0);
+                    px[1] = (wg[i] / d).clamp(0.0, 1.0);
+                    px[2] = (wb[i] / d).clamp(0.0, 1.0);
+                } else {
+                    px[0] = ir[i];
+                    px[1] = ig[i];
+                    px[2] = ib[i];
+                }
+            });
+            out
+        };
+
+        (
+            diffuse_weighted_rgb(&w_fg, r_col_fg),
+            diffuse_weighted_rgb(&w_bg, r_col_bg),
+        )
+    } else {
+        (Vec::new(), Vec::new())
+    };
+
+    GuidedMatteResult {
+        fg_alpha,
+        f_local,
+        b_local,
+        gw,
+        gh,
+    }
+}
+
+fn masked_background_bokeh(base_rgb: &[f32], fg_alpha: &[f32], w: usize, h: usize, radius: usize) -> Vec<f32> {
+    if radius == 0 || w == 0 || h == 0 {
+        return base_rgb.to_vec();
+    }
+    let n = w * h;
+    let mut wb = vec![0.0f32; n];
+    let mut wr = vec![0.0f32; n];
+    let mut wg = vec![0.0f32; n];
+    let mut wbl = vec![0.0f32; n];
+
+    for i in 0..n {
+        let weight = (1.0 - fg_alpha[i]).clamp(0.0, 1.0).powi(2);
+        wb[i] = weight;
+        wr[i] = base_rgb[i * 3] * weight;
+        wg[i] = base_rgb[i * 3 + 1] * weight;
+        wbl[i] = base_rgb[i * 3 + 2] * weight;
+    }
+
+    let r2 = (radius / 2).max(1);
+    let wr_b = box_filter_plane(&box_filter_plane(&wr, w, h, radius), w, h, r2);
+    let wg_b = box_filter_plane(&box_filter_plane(&wg, w, h, radius), w, h, r2);
+    let wbl_b = box_filter_plane(&box_filter_plane(&wbl, w, h, radius), w, h, r2);
+    let wb_b = box_filter_plane(&box_filter_plane(&wb, w, h, radius), w, h, r2);
+
+    let mut out = vec![0.0f32; n * 3];
+    out.par_chunks_mut(3).enumerate().for_each(|(i, px)| {
+        let denom = wb_b[i];
+        if denom > 1e-4 {
+            px[0] = (wr_b[i] / denom).clamp(0.0, 1.0);
+            px[1] = (wg_b[i] / denom).clamp(0.0, 1.0);
+            px[2] = (wbl_b[i] / denom).clamp(0.0, 1.0);
+        } else {
+            px[0] = base_rgb[i * 3];
+            px[1] = base_rgb[i * 3 + 1];
+            px[2] = base_rgb[i * 3 + 2];
+        }
+    });
+    out
+}
+
+fn parse_hex_color(hex: &str) -> (f32, f32, f32) {
+    let s = hex.trim().trim_start_matches('#');
+    if s.len() == 6 {
+        if let (Ok(r), Ok(g), Ok(b)) = (
+            u8::from_str_radix(&s[0..2], 16),
+            u8::from_str_radix(&s[2..4], 16),
+            u8::from_str_radix(&s[4..6], 16),
+        ) {
+            return (r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0);
+        }
+    }
+    (0.91, 0.93, 0.96)
+}
+
+fn compute_cast_shadow_plane(
+    fg_alpha: &[f32],
+    w: usize,
+    h: usize,
+    params: &RetouchParams,
+) -> (Vec<f32>, usize, usize, f32, f32) {
+    let max_d = 384usize;
+    let scale = (max_d as f32 / w.max(h).max(1) as f32).min(1.0);
+    let sw = ((w as f32 * scale).round() as usize).max(32);
+    let sh = ((h as f32 * scale).round() as usize).max(32);
+
+    let mut plane = vec![0.0f32; sw * sh];
+    for y in 0..sh {
+        let ny = (y as f32 + 0.5) / sh as f32;
+        for x in 0..sw {
+            let nx = (x as f32 + 0.5) / sw as f32;
+            plane[y * sw + x] = sample_plane_bilinear(fg_alpha, w, h, nx, ny).clamp(0.0, 1.0);
+        }
+    }
+
+    let blur_norm = (params.bg_shadow_blur / 100.0).clamp(0.0, 1.0);
+    let (base_rad_frac, off_x, off_y) = match params.bg_shadow_type.as_str() {
+        "soft_shadow" => (0.022 + blur_norm * 0.055, 0.008f32, 0.018f32),
+        "hard_shadow" => (0.006 + blur_norm * 0.024, 0.026f32, 0.022f32),
+        "cast_shadow" => (0.010 + blur_norm * 0.036, 0.052f32, 0.036f32),
+        _ => (0.015, 0.01, 0.015),
+    };
+    let rad = ((sw.min(sh) as f32 * base_rad_frac).round() as usize).clamp(1, 28);
+    let b1 = box_filter_plane(&plane, sw, sh, rad);
+    let b2 = box_filter_plane(&b1, sw, sh, (rad / 2).max(1));
+    (b2, sw, sh, off_x, off_y)
+}
+
+fn prepare_custom_background(
+    b64: &str,
+    w: usize,
+    h: usize,
+    params: &RetouchParams,
+) -> Option<Vec<f32>> {
+    if b64.trim().is_empty() || w == 0 || h == 0 {
+        return None;
+    }
+    let dyn_img = decode_data_url(b64).ok()?;
+    let rgba = dyn_img.to_rgba8();
+    let sw = rgba.width().max(1) as f32;
+    let sh = rgba.height().max(1) as f32;
+
+    let target_aspect = w as f32 / h as f32;
+    let src_aspect = sw / sh;
+    let scale_zoom = 1.0 + (params.bg_scale / 100.0).clamp(0.0, 1.5);
+    let pan_x = -(params.bg_offset_x / 100.0) * 0.45;
+    let pan_y = -(params.bg_offset_y / 100.0) * 0.45;
+    let fill_mode = params.bg_fill_mode.as_str();
+
+    let (u0, v0, uw, vh) = if fill_mode == "stretch" {
+        (0.0, 0.0, 1.0, 1.0)
+    } else if fill_mode == "contain" {
+        if src_aspect > target_aspect {
+            let fit_h = target_aspect / src_aspect;
+            (0.0, -(1.0 - fit_h) * 0.5 / fit_h, 1.0, 1.0 / fit_h)
+        } else {
+            let fit_w = src_aspect / target_aspect;
+            (-(1.0 - fit_w) * 0.5 / fit_w, 0.0, 1.0 / fit_w, 1.0)
+        }
+    } else if src_aspect > target_aspect {
+        let crop_w = target_aspect / src_aspect;
+        ((1.0 - crop_w) * 0.5, 0.0, crop_w, 1.0)
+    } else {
+        let crop_h = src_aspect / target_aspect;
+        (0.0, (1.0 - crop_h) * 0.5, 1.0, crop_h)
+    };
+
+    let mut buf = vec![0.0f32; w * h * 3];
+    buf.par_chunks_mut(w * 3).enumerate().for_each(|(y, row)| {
+        let vy = (y as f32 + 0.5) / h as f32;
+        let fy = 0.5 + (vy - 0.5) / scale_zoom + pan_y;
+        let mut ny = v0 + fy * vh;
+        for x in 0..w {
+            let vx = (x as f32 + 0.5) / w as f32;
+            let fx = 0.5 + (vx - 0.5) / scale_zoom + pan_x;
+            let mut nx = u0 + fx * uw;
+            let p = if fill_mode == "tile" {
+                let tx = (nx * 2.0).rem_euclid(1.0);
+                let ty = (ny * 2.0).rem_euclid(1.0);
+                sample_rgba_bilinear(&rgba, tx, ty)
+            } else if fill_mode == "contain" && (nx < 0.0 || nx > 1.0 || ny < 0.0 || ny > 1.0) {
+                [0.08, 0.09, 0.11, 1.0]
+            } else {
+                nx = nx.clamp(0.0, 1.0);
+                ny = ny.clamp(0.0, 1.0);
+                sample_rgba_bilinear(&rgba, nx, ny)
+            };
+            let i = x * 3;
+            row[i] = p[0];
+            row[i + 1] = p[1];
+            row[i + 2] = p[2];
+        }
+    });
+
+    let effective_blur = params.bg_blur_strength.max(params.bg_blur_bokeh);
+    if effective_blur > 0.5 {
+        let rad = ((w.min(h) as f32 * 0.020 * (effective_blur / 100.0)).round() as usize).clamp(1, 36);
+        let mut r_ch = Vec::with_capacity(w * h);
+        let mut g_ch = Vec::with_capacity(w * h);
+        let mut b_ch = Vec::with_capacity(w * h);
+        for chunk in buf.chunks_exact(3) {
+            r_ch.push(chunk[0]);
+            g_ch.push(chunk[1]);
+            b_ch.push(chunk[2]);
+        }
+        let rb = box_filter_plane(&r_ch, w, h, rad);
+        let gb = box_filter_plane(&g_ch, w, h, rad);
+        let bb = box_filter_plane(&b_ch, w, h, rad);
+        for i in 0..(w * h) {
+            buf[i * 3] = rb[i];
+            buf[i * 3 + 1] = gb[i];
+            buf[i * 3 + 2] = bb[i];
+        }
+    }
+    Some(buf)
+}
+
+#[inline]
+fn is_studio_solid_bg(mode: &str) -> bool {
+    matches!(
+        mode,
+        "transparent"
+            | "pure_white"
+            | "warm_beige"
+            | "studio_grey"
+            | "slate_grey_03"
+            | "fabric_02"
+            | "passport_blue"
+            | "moody_black"
+            | "pastel_pink"
+            | "sage_green"
+            | "lavender_mist"
+            | "custom_color"
+    )
+}
+
+#[inline]
+fn eval_replaced_background(
+    params: &RetouchParams,
+    custom_rgb: (f32, f32, f32),
+    custom_img: &[f32],
+    x: usize,
+    y: usize,
+    w: usize,
+    h: usize,
+) -> (f32, f32, f32) {
+    let mode = params.bg_replace_mode.as_str();
+    if mode == "custom_image" && custom_img.len() == w * h * 3 {
+        let idx = (y * w + x) * 3;
+        return (custom_img[idx], custom_img[idx + 1], custom_img[idx + 2]);
+    }
+
+    let scale_zoom = 1.0 + (params.bg_scale / 100.0).clamp(0.0, 1.5);
+    let pan_x = -(params.bg_offset_x / 100.0) * 0.45;
+    let pan_y = -(params.bg_offset_y / 100.0) * 0.45;
+    let nx = (0.5 + ((x as f32 / w.max(1) as f32) - 0.5) / scale_zoom + pan_x).clamp(0.0, 1.0);
+    let ny = (0.5 + ((y as f32 / h.max(1) as f32) - 0.5) / scale_zoom + pan_y).clamp(0.0, 1.0);
+
+    let dx = (nx - 0.5) * 1.4;
+    let dy = (ny - 0.36) * 1.25;
+    let radial = (1.0 - (dx * dx + dy * dy).sqrt().min(1.0)).clamp(0.0, 1.0);
+    let effective_blur = params.bg_blur_strength.max(params.bg_blur_bokeh);
+    let cloud_soft = 1.0 - (effective_blur / 100.0).clamp(0.0, 1.0) * 0.85;
+    let sky_boost = (params.sky_enhance / 100.0).clamp(0.0, 1.0);
+
+    match mode {
+        "transparent" => (0.0, 0.0, 0.0),
+        "pure_white" => (1.0, 1.0, 1.0),
+        "warm_beige" => {
+            let k = 0.88 + 0.08 * radial;
+            ((0.72 * k).clamp(0.0, 1.0), (0.61 * k).clamp(0.0, 1.0), (0.55 * k).clamp(0.0, 1.0))
+        }
+        "studio_grey" => {
+            let k = 0.78 + 0.28 * radial;
+            ((0.52 * k).clamp(0.0, 1.0), (0.54 * k).clamp(0.0, 1.0), (0.57 * k).clamp(0.0, 1.0))
+        }
+        "slate_grey_03" => {
+            let k = 0.82 + 0.20 * radial;
+            ((0.42 * k).clamp(0.0, 1.0), (0.41 * k).clamp(0.0, 1.0), (0.45 * k).clamp(0.0, 1.0))
+        }
+        "fabric_02" => {
+            let m1 = ((nx * 6.2 + 0.4).sin() * (ny * 5.4 + 0.9).cos()) * 0.5 + 0.5;
+            let m2 = ((nx * 14.0 - ny * 11.0).sin() * (nx * 9.0 + ny * 13.0).cos()) * 0.5 + 0.5;
+            let weave = if effective_blur < 25.0 {
+                (((x * 2654435761 ^ y * 2246822519) & 0xff) as f32 / 255.0 - 0.5) * 0.024 * cloud_soft
+            } else {
+                0.0
+            };
+            let mot = (m1 * 0.62 + m2 * 0.38 - 0.5) * 0.14 * cloud_soft;
+            let base = (0.20 + radial * 0.12 + mot + weave).clamp(0.05, 0.48);
+            ((base * 0.96).clamp(0.0, 1.0), (base * 1.00).clamp(0.0, 1.0), (base * 1.07).clamp(0.0, 1.0))
+        }
+        "passport_blue" => {
+            let k = 0.88 + 0.14 * radial;
+            ((0.18 * k).clamp(0.0, 1.0), (0.47 * k).clamp(0.0, 1.0), (0.84 * k).clamp(0.0, 1.0))
+        }
+        "moody_black" => {
+            let k = 0.35 + 0.85 * radial;
+            ((0.08 * k).clamp(0.0, 1.0), (0.085 * k).clamp(0.0, 1.0), (0.10 * k).clamp(0.0, 1.0))
+        }
+        "pastel_pink" => {
+            let k = 0.92 + 0.08 * radial;
+            ((0.96 * k).clamp(0.0, 1.0), (0.80 * k).clamp(0.0, 1.0), (0.84 * k).clamp(0.0, 1.0))
+        }
+        "sage_green" => {
+            let k = 0.90 + 0.10 * radial;
+            ((0.60 * k).clamp(0.0, 1.0), (0.72 * k).clamp(0.0, 1.0), (0.65 * k).clamp(0.0, 1.0))
+        }
+        "lavender_mist" => {
+            let k = 0.90 + 0.10 * radial;
+            ((0.80 * k).clamp(0.0, 1.0), (0.77 * k).clamp(0.0, 1.0), (0.91 * k).clamp(0.0, 1.0))
+        }
+        "custom_color" => custom_rgb,
+        "sky_golden_sunset" => {
+            let cloud = (((nx * 9.0 + ny * 4.0).sin() * (nx * 15.0 - ny * 7.0).cos()).max(0.0) * 0.14) * cloud_soft;
+            let sr = (0.97 - ny * 0.10 + cloud + sky_boost * 0.04).clamp(0.0, 1.0);
+            let sg = (0.54 + ny * 0.22 + cloud * 0.8).clamp(0.0, 1.0);
+            let sb = (0.36 + (1.0 - ny) * 0.28 + cloud * 0.5 - sky_boost * 0.06).clamp(0.0, 1.0);
+            (sr, sg, sb)
+        }
+        "sky_alpine_blue" => {
+            let cloud = (((nx * 11.0 + 1.2).sin() * (ny * 8.0 + 0.5).cos()).max(0.0).powi(2) * 0.26 * (1.0 - ny * 0.6)) * cloud_soft;
+            let sr = (0.20 + ny * 0.46 + cloud - sky_boost * 0.08).clamp(0.0, 1.0);
+            let sg = (0.50 + ny * 0.35 + cloud - sky_boost * 0.03).clamp(0.0, 1.0);
+            let sb = (0.89 + ny * 0.09 + cloud * 0.5 + sky_boost * 0.08).clamp(0.0, 1.0);
+            (sr, sg, sb)
+        }
+        "sky_dramatic_clouds" => {
+            let storm = (((nx * 7.5).sin() * (ny * 6.0).cos() * 0.5 + 0.5) * 0.22) * cloud_soft;
+            let sr = (0.24 + ny * 0.26 + storm - sky_boost * 0.05).clamp(0.0, 1.0);
+            let sg = (0.28 + ny * 0.26 + storm).clamp(0.0, 1.0);
+            let sb = (0.37 + ny * 0.23 + storm * 1.1 + sky_boost * 0.07).clamp(0.0, 1.0);
+            (sr, sg, sb)
+        }
+        "sky_night_stars" => {
+            let star_hash = (((x * 747796405 + y * 2891336453) ^ 0x27d4eb2d) & 0xfff) as f32 / 4095.0;
+            let star = if star_hash > 0.996 && ny < 0.65 && effective_blur < 30.0 { 0.85 } else { 0.0 };
+            let sr = (0.05 + ny * 0.08 + star).clamp(0.0, 1.0);
+            let sg = (0.08 + ny * 0.12 + star).clamp(0.0, 1.0);
+            let sb = (0.18 + ny * 0.18 + star + sky_boost * 0.08).clamp(0.0, 1.0);
+            (sr, sg, sb)
+        }
+        _ => (0.94, 0.95, 0.97),
+    }
+}
+
 /// Adaptive denoiser for RAW and JPG: estimates the noise level of the photo itself,
 /// then applies non-local means (patch matching, edge preserving) and chroma smoothing.
 fn adaptive_denoise_rgb(src: &[f32], w: usize, h: usize, strength: f32, detail: f32) -> Vec<f32> {
@@ -1502,12 +3169,21 @@ pub fn apply_retouch_pipeline(
     params: &RetouchParams,
     mask_img: Option<&RgbaImage>,
 ) -> RgbaImage {
+    apply_retouch_pipeline_with_scene(img, params, mask_img, None)
+}
+
+pub fn apply_retouch_pipeline_with_scene(
+    img: &RgbaImage,
+    params: &RetouchParams,
+    mask_img: Option<&RgbaImage>,
+    scene_mask_img: Option<&RgbaImage>,
+) -> RgbaImage {
     let (w_u32, h_u32) = img.dimensions();
     let w = w_u32 as usize;
     let h = h_u32 as usize;
 
-    // Build the 512x512 pre-feathered Semantic Anatomical Mask Grid (aligned 1:1 with unwarped original image!)
-    let semantic_grid = build_semantic_grid(mask_img, &params.face);
+    // Build the 512x512 Semantic Anatomical Grid + continuous neural foreground/hair fields
+    let semantic_data = build_semantic_grid(mask_img, scene_mask_img, &params.face);
 
     // Load original image into normalized RGB float buffer (in original coordinates so masks align 1:1!)
     let mut base_rgb = vec![0.0f32; w * h * 3];
@@ -1575,11 +3251,123 @@ pub fn apply_retouch_pipeline(
         base_rgb = adaptive_denoise_rgb(&base_rgb, w, h, params.ai_denoise, params.nr_detail);
     }
 
-    // Multi-scale Frequency Separation Blurs on base_rgb
+    let is_replacing = params.bg_replace_mode != "original";
+    let is_transparent_bg = params.bg_replace_mode == "transparent";
+    let has_scene_fx = is_replacing
+        || params.bg_blur_bokeh > 0.5
+        || params.stray_hair > 0.5
+        || params.backdrop_clean > 0.5
+        || params.backdrop_banding_fix > 0.5
+        || params.sky_enhance > 0.5
+        || params.bg_clean_distractions
+        || params.bg_clean_defects
+        || params.bg_even_brightness
+        || params.bg_remove_banding;
+
+    let guided_matte = if has_scene_fx {
+        Some(if params.is_highres_matte {
+            if let Some(s_img) = scene_mask_img {
+                compute_highres_direct_matte(
+                    &base_rgb,
+                    w,
+                    h,
+                    s_img,
+                    params,
+                    is_replacing && params.bg_decontam,
+                )
+            } else {
+                compute_guided_matte(
+                    &base_rgb,
+                    w,
+                    h,
+                    &semantic_data,
+                    params,
+                    is_replacing,
+                )
+            }
+        } else {
+            compute_guided_matte(
+                &base_rgb,
+                w,
+                h,
+                &semantic_data,
+                params,
+                is_replacing,
+            )
+        })
+    } else {
+        None
+    };
+
+    let (bg_mean_r, bg_mean_g, bg_mean_b, bg_mean_luma) = if let Some(ref gm) = guided_matte {
+        if params.bg_even_brightness || (is_replacing && (params.bg_preserve_shadow || params.bg_decontam)) {
+            let mut sr = 0.0f64;
+            let mut sg = 0.0f64;
+            let mut sb = 0.0f64;
+            let mut sw = 0.0f64;
+            let step = ((w * h) / 25000).max(1);
+            for i in (0..(w * h)).step_by(step) {
+                let bg_w = (1.0 - gm.fg_alpha[i]).max(0.0).powi(2) as f64;
+                if bg_w > 0.05 {
+                    sr += base_rgb[i * 3] as f64 * bg_w;
+                    sg += base_rgb[i * 3 + 1] as f64 * bg_w;
+                    sb += base_rgb[i * 3 + 2] as f64 * bg_w;
+                    sw += bg_w;
+                }
+            }
+            if sw > 1.0 {
+                let mr = (sr / sw) as f32;
+                let mg = (sg / sw) as f32;
+                let mb = (sb / sw) as f32;
+                let ml = (0.299 * mr + 0.587 * mg + 0.114 * mb).clamp(0.05, 0.98);
+                (mr, mg, mb, ml)
+            } else {
+                (0.5, 0.5, 0.5, 0.5)
+            }
+        } else {
+            (0.5, 0.5, 0.5, 0.5)
+        }
+    } else {
+        (0.5, 0.5, 0.5, 0.5)
+    };
+
+    let cast_shadow = if is_replacing
+        && !is_transparent_bg
+        && params.bg_shadow_type != "none"
+        && params.bg_shadow_opacity > 0.5
+    {
+        guided_matte
+            .as_ref()
+            .map(|gm| compute_cast_shadow_plane(&gm.fg_alpha, w, h, params))
+    } else {
+        None
+    };
+
+    let custom_bg_rgb = if params.bg_replace_mode == "custom_color" {
+        parse_hex_color(&params.bg_custom_color)
+    } else {
+        (0.91, 0.93, 0.96)
+    };
+    let custom_bg_buf = if params.bg_replace_mode == "custom_image" {
+        prepare_custom_background(&params.bg_custom_image, w, h, params).unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
+    // Multi-scale Frequency Separation Blurs on base_rgb (background bokeh skips foreground pixels)
     let fine_radius = ((w.min(h) as f32 * 0.0045).round() as usize).clamp(2, 10);
     let med_radius = ((w.min(h) as f32 * 0.014).round() as usize).clamp(5, 24);
-    let bokeh_radius = if params.bg_blur_bokeh > 0.5 || params.stray_hair > 0.5 || params.backdrop_banding_fix > 0.5 {
-        ((w.min(h) as f32 * 0.026 * (params.bg_blur_bokeh.max(35.0) / 100.0)).round() as usize).clamp(6, 44)
+    let bokeh_radius = if !is_replacing
+        && (params.bg_blur_bokeh > 0.5
+            || params.stray_hair > 0.5
+            || params.backdrop_clean > 0.5
+            || params.backdrop_banding_fix > 0.5
+            || params.bg_clean_distractions
+            || params.bg_clean_defects
+            || params.bg_remove_banding)
+    {
+        ((w.min(h) as f32 * 0.026 * (params.bg_blur_bokeh.max(35.0) / 100.0)).round() as usize)
+            .clamp(6, 44)
     } else {
         0
     };
@@ -1588,8 +3376,21 @@ pub fn apply_retouch_pipeline(
     let blur_med_p1 = separable_blur(&base_rgb, w, h, med_radius);
     let blur_med = separable_blur(&blur_med_p1, w, h, med_radius / 2 + 1);
     let blur_bokeh = if bokeh_radius > 0 {
-        let p1 = separable_blur(&base_rgb, w, h, bokeh_radius);
-        separable_blur(&p1, w, h, bokeh_radius / 2 + 1)
+        if let Some(ref gm) = guided_matte {
+            masked_background_bokeh(&base_rgb, &gm.fg_alpha, w, h, bokeh_radius)
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    };
+    let need_cloth_broad = params.clothing_dewrinkle > 0.5
+        || params.clothing_sweat_stain > 0.5
+        || params.clothing_edge_smooth > 0.5
+        || params.clothing_moire_remove > 0.5;
+    let blur_cloth_broad = if need_cloth_broad {
+        let cloth_broad_radius = (med_radius * 2 + 2).clamp(10, 44);
+        separable_blur(&blur_med, w, h, cloth_broad_radius)
     } else {
         Vec::new()
     };
@@ -1714,7 +3515,7 @@ pub fn apply_retouch_pipeline(
                 let high_g = g - gf;
                 let high_b = b - bf;
 
-                let sem = sample_semantic_grid(&semantic_grid, nx, ny);
+                let sem = sample_semantic_grid(&semantic_data.weights, nx, ny);
 
                 // Combine neural polygon skin mask with subtle color gate so non-skin objects are never smoothed
                 let color_sw = skin_weight(r, g, b);
@@ -2115,150 +3916,256 @@ pub fn apply_retouch_pipeline(
                     }
                 }
 
-                // 7b. Clothing De-Wrinkle & Lint Clean (Strictly sem.clothing!)
-                if sem.clothing > 0.02 {
+                // 7b. Evoto Clothing Retouching (De-wrinkle Small/Large, Lint, Sweat Stain, Edge Smooth & Moiré Removal)
+                let (rb_c, gb_c, bb_c) = if !blur_cloth_broad.is_empty() {
+                    (
+                        blur_cloth_broad[idx],
+                        blur_cloth_broad[idx + 1],
+                        blur_cloth_broad[idx + 2],
+                    )
+                } else {
+                    (rm, gm, bm)
+                };
+                let cloth_w = (sem.clothing * (1.0 - sem.skin * 0.65)).clamp(0.0, 1.0);
+                if cloth_w > 0.02 {
+                    let (target_small_k, target_large_k, target_seam_k) = match params.clothing_target.as_str() {
+                        "female" => (1.10f32, 0.94f32, 1.05f32),
+                        "male" => (0.96f32, 1.12f32, 0.95f32),
+                        "child" => (0.90f32, 0.85f32, 1.15f32),
+                        "senior_female" | "senior_male" => (0.92f32, 1.04f32, 1.10f32),
+                        _ => (1.0f32, 1.0f32, 1.0f32),
+                    };
+
+                    // Multi-scale wrinkle ironing (Micro weave preserved + Independent Small vs Large crease bands)
                     if params.clothing_dewrinkle > 0.5 {
-                        let diff = ((rf - rm).abs() + (gf - gm).abs() + (bf - bm).abs()) / 3.0;
-                        let seam_guard = (1.0 - (diff / 0.16)).clamp(0.0, 1.0);
-                        let cw_a = (sem.clothing * seam_guard * (params.clothing_dewrinkle / 100.0) * 0.88).clamp(0.0, 0.92);
-                        r = r * (1.0 - cw_a) + (rm + high_r * 0.40) * cw_a;
-                        g = g * (1.0 - cw_a) + (gm + high_g * 0.40) * cw_a;
-                        b = b * (1.0 - cw_a) + (bm + high_b * 0.40) * cw_a;
+                        let master = (params.clothing_dewrinkle / 100.0).clamp(0.0, 1.0);
+                        let small_w = (params.clothing_small_wrinkles / 100.0).clamp(0.0, 1.0) * target_small_k;
+                        let large_w = (params.clothing_large_wrinkles / 100.0).clamp(0.0, 1.0) * target_large_k;
+
+                        let small_diff = ((rf - rm).abs() + (gf - gm).abs() + (bf - bm).abs()) / 3.0;
+                        let seam_guard = (1.0 - (small_diff * target_seam_k / 0.16)).clamp(0.0, 1.0);
+                        let broad_diff = ((rm - rb_c).abs() + (gm - gb_c).abs() + (bm - bb_c).abs()) / 3.0;
+                        let broad_seam_guard = (1.0 - (broad_diff * target_seam_k / 0.24)).clamp(0.0, 1.0);
+
+                        let a_small = (cloth_w * seam_guard * master * small_w * 0.88).clamp(0.0, 0.94);
+                        let a_large = (cloth_w * broad_seam_guard * master * large_w * 0.78).clamp(0.0, 0.90);
+                        let tex_keep = 1.0 - cloth_w * seam_guard * master * small_w.max(large_w).clamp(0.0, 1.0) * 0.45;
+
+                        r = (rb_c + (rm - rb_c) * (1.0 - a_large) + (rf - rm) * (1.0 - a_small) + (r - rf) * tex_keep).clamp(0.0, 1.0);
+                        g = (gb_c + (gm - gb_c) * (1.0 - a_large) + (gf - gm) * (1.0 - a_small) + (g - gf) * tex_keep).clamp(0.0, 1.0);
+                        b = (bb_c + (bm - bb_c) * (1.0 - a_large) + (bf - bm) * (1.0 - a_small) + (b - bf) * tex_keep).clamp(0.0, 1.0);
                     }
+
+                    // Lint & dust speck cleanup (both white lint on dark clothing and dark fuzz on light shirts)
                     if params.clothing_lint_clean > 0.5 {
                         let lum_curr = 0.299 * r + 0.587 * g + 0.114 * b;
                         let lum_fine = 0.299 * rf + 0.587 * gf + 0.114 * bf;
-                        let speck = (lum_curr - lum_fine).max(0.0);
-                        if speck > 0.015 {
-                            let lint_a = (sem.clothing * (params.clothing_lint_clean / 100.0) * (speck * 18.0)).clamp(0.0, 0.95);
+                        let white_speck = (lum_curr - lum_fine).max(0.0);
+                        let dark_speck = if lum_fine > 0.44 {
+                            (lum_fine - lum_curr).max(0.0)
+                        } else {
+                            0.0
+                        };
+                        let speck = white_speck.max(dark_speck * 0.85);
+                        if speck > 0.014 {
+                            let lint_a = (cloth_w * (params.clothing_lint_clean / 100.0) * (speck * 18.0)).clamp(0.0, 0.95);
                             r = r * (1.0 - lint_a) + rf * lint_a;
                             g = g * (1.0 - lint_a) + gf * lint_a;
                             b = b * (1.0 - lint_a) + bf * lint_a;
                         }
                     }
-                }
 
-                // 7c. Stray Hair & Background Bokeh / Clean / Banding / Sky / Replace (Strictly sem.background!)
-                let bg_mask = sem.background;
-                let bg_blur_str = params.bg_blur_bokeh / 100.0;
-                let stray_str = params.stray_hair / 100.0;
-
-                if !blur_bokeh.is_empty() && (bg_blur_str > 0.005 || stray_str > 0.005) {
-                    let rb = blur_bokeh[idx];
-                    let gb = blur_bokeh[idx + 1];
-                    let bb = blur_bokeh[idx + 2];
-
-                    if stray_str > 0.005 && bg_mask > 0.15 && ny < face.mouth_y + 0.08 {
-                        let sa = (stray_str * bg_mask * 0.88).clamp(0.0, 0.94);
-                        r = r * (1.0 - sa) + rb * sa;
-                        g = g * (1.0 - sa) + gb * sa;
-                        b = b * (1.0 - sa) + bb * sa;
+                    // Sweat stain removal (lifts localized darker damp blotches while protecting prints/patterns & preserving weave)
+                    if params.clothing_sweat_stain > 0.5 {
+                        let sw_str = (params.clothing_sweat_stain / 100.0).clamp(0.0, 1.0);
+                        let sw_even = (params.clothing_sweat_evenness / 100.0).clamp(0.0, 1.0);
+                        let lum_m = 0.299 * rm + 0.587 * gm + 0.114 * bm;
+                        let lum_b = 0.299 * rb_c + 0.587 * gb_c + 0.114 * bb_c;
+                        let damp_dip = (lum_b - lum_m).clamp(0.0, 0.30);
+                        let chroma_m = (rm - bm).abs().max((rm - gm).abs());
+                        let chroma_b = (rb_c - bb_c).abs().max((rb_c - gb_c).abs());
+                        let hue_guard = (1.0 - (chroma_m - chroma_b).abs() / 0.11).clamp(0.0, 1.0);
+                        if damp_dip > 0.008 && hue_guard > 0.05 {
+                            let even_k = 0.35 + 0.65 * sw_even;
+                            let patch_a = (cloth_w * hue_guard * sw_str * (damp_dip * 7.8 + 0.25 * sw_even) * even_k).clamp(0.0, 0.92);
+                            let dr = r - rm;
+                            let dg = g - gm;
+                            let db = b - bm;
+                            r = (rm * (1.0 - patch_a) + rb_c * patch_a + dr * (1.0 - patch_a * 0.25)).clamp(0.0, 1.0);
+                            g = (gm * (1.0 - patch_a) + gb_c * patch_a + dg * (1.0 - patch_a * 0.25)).clamp(0.0, 1.0);
+                            b = (bm * (1.0 - patch_a) + bb_c * patch_a + db * (1.0 - patch_a * 0.25)).clamp(0.0, 1.0);
+                        }
                     }
-                    if bg_blur_str > 0.005 && bg_mask > 0.01 {
-                        let ba = (bg_mask * bg_blur_str).clamp(0.0, 0.98);
-                        r = r * (1.0 - ba) + rb * ba;
-                        g = g * (1.0 - ba) + gb * ba;
-                        b = b * (1.0 - ba) + bb * ba;
+
+                    // Moiré & fabric aliasing pattern suppression (neutralizes high-frequency chroma rainbows + periodic shimmer)
+                    if params.clothing_moire_remove > 0.5 {
+                        let m_str = (params.clothing_moire_remove / 100.0).clamp(0.0, 1.0);
+                        let lum_now = 0.299 * r + 0.587 * g + 0.114 * b;
+                        let lum_f = 0.299 * rf + 0.587 * gf + 0.114 * bf;
+                        let lum_m = 0.299 * rm + 0.587 * gm + 0.114 * bm;
+                        let lum_b = 0.299 * rb_c + 0.587 * gb_c + 0.114 * bb_c;
+                        let clean_cr = (rm * 0.45 + rb_c * 0.55) - (lum_m * 0.45 + lum_b * 0.55);
+                        let clean_cg = (gm * 0.45 + gb_c * 0.55) - (lum_m * 0.45 + lum_b * 0.55);
+                        let clean_cb = (bm * 0.45 + bb_c * 0.55) - (lum_m * 0.45 + lum_b * 0.55);
+                        let chroma_rip = ((r - lum_now) - clean_cr).abs()
+                            + ((g - lum_now) - clean_cg).abs()
+                            + ((b - lum_now) - clean_cb).abs();
+                        let lum_rip = (lum_now - lum_f).abs() + (lum_f - lum_m).abs() * 0.65;
+                        let rip_gate = ((chroma_rip * 8.0 + lum_rip * 5.0)).clamp(0.18, 1.0);
+                        let ca = (cloth_w * m_str * rip_gate * 0.92).clamp(0.0, 0.94);
+                        let clean_lum = lum_m + (lum_f - lum_m) * (1.0 - m_str * 0.62) + (lum_now - lum_f) * (1.0 - m_str * 0.45);
+                        let moire_r = (clean_lum + clean_cr).clamp(0.0, 1.0);
+                        let moire_g = (clean_lum + clean_cg).clamp(0.0, 1.0);
+                        let moire_b = (clean_lum + clean_cb).clamp(0.0, 1.0);
+                        r = r * (1.0 - ca) + moire_r * ca;
+                        g = g * (1.0 - ca) + moire_g * ca;
+                        b = b * (1.0 - ca) + moire_b * ca;
                     }
                 }
 
-                if params.backdrop_clean > 0.5 && bg_mask > 0.02 {
-                    let ca = (bg_mask * (params.backdrop_clean / 100.0) * 0.85).clamp(0.0, 0.92);
-                    r = r * (1.0 - ca) + rm * ca;
-                    g = g * (1.0 - ca) + gm * ca;
-                    b = b * (1.0 - ca) + bm * ca;
+                // Garment Contour & Hem Edge Smoothing (Làm phẳng viền trang phục along boundary of sem.clothing)
+                if params.clothing_edge_smooth > 0.5 {
+                    let step = 2.0 / MASK_DIM as f32;
+                    let c_l = sample_semantic_grid(&semantic_data.weights, (nx - step).max(0.0), ny).clothing;
+                    let c_r = sample_semantic_grid(&semantic_data.weights, (nx + step).min(1.0), ny).clothing;
+                    let c_u = sample_semantic_grid(&semantic_data.weights, nx, (ny - step).max(0.0)).clothing;
+                    let c_d = sample_semantic_grid(&semantic_data.weights, nx, (ny + step).min(1.0)).clothing;
+                    let c_avg = 0.25 * (c_l + c_r + c_u + c_d);
+                    let edge_band = ((c_avg - sem.clothing).abs() * 4.5 + sem.clothing * (1.0 - sem.clothing) * 4.0)
+                        .clamp(0.0, 1.0)
+                        * (1.0 - sem.skin * 0.70);
+                    if edge_band > 0.02 && (sem.clothing > 0.01 || c_avg > 0.04) {
+                        let edge_str = (params.clothing_edge_smooth / 100.0).clamp(0.0, 1.0);
+                        let refine_k = (params.clothing_edge_refine / 100.0).clamp(0.0, 1.0);
+                        let ea = (edge_band * edge_str * 0.88).clamp(0.0, 0.90);
+                        let target_r = rm * (0.45 + 0.55 * refine_k) + rb_c * (0.55 - 0.55 * refine_k);
+                        let target_g = gm * (0.45 + 0.55 * refine_k) + gb_c * (0.55 - 0.55 * refine_k);
+                        let target_b = bm * (0.45 + 0.55 * refine_k) + bb_c * (0.55 - 0.55 * refine_k);
+                        let hi_keep = 0.15 + 0.45 * refine_k;
+                        r = r * (1.0 - ea) + (target_r + (r - rf) * hi_keep) * ea;
+                        g = g * (1.0 - ea) + (target_g + (g - gf) * hi_keep) * ea;
+                        b = b * (1.0 - ea) + (target_b + (b - bf) * hi_keep) * ea;
+                    }
                 }
 
-                if params.backdrop_banding_fix > 0.5 && bg_mask > 0.02 && !blur_bokeh.is_empty() {
-                    let bf_a = (bg_mask * (params.backdrop_banding_fix / 100.0) * 0.82).clamp(0.0, 0.92);
-                    let dither = ((((x * 1973 + y * 9277) ^ 0x68bc21eb) & 0xff) as f32 / 255.0 - 0.5) * 0.006;
-                    r = r * (1.0 - bf_a) + (blur_bokeh[idx] + dither) * bf_a;
-                    g = g * (1.0 - bf_a) + (blur_bokeh[idx + 1] + dither) * bf_a;
-                    b = b * (1.0 - bf_a) + (blur_bokeh[idx + 2] + dither) * bf_a;
-                }
+                // 7c. Stray Hair Refinement, Foreground Color Decontamination & Original-Mode Optimization
+                if let Some(ref gm) = guided_matte {
+                    let fg_a = gm.fg_alpha[y * w + x];
+                    if is_replacing {
+                        if fg_a > 0.02 && fg_a < 0.95 && !gm.f_local.is_empty() && !gm.b_local.is_empty() {
+                            let gx = ((nx * gm.gw as f32) - 0.5).clamp(0.0, (gm.gw - 1) as f32);
+                            let gy = ((ny * gm.gh as f32) - 0.5).clamp(0.0, (gm.gh - 1) as f32);
+                            let (fr, fg_c, fb) = sample_bilinear(&gm.f_local, gm.gw, gm.gh, gx, gy);
+                            let (br, bg_c, bb) = sample_bilinear(&gm.b_local, gm.gw, gm.gh, gx, gy);
+                            let hair_p_px = sample_plane_bilinear(&semantic_data.raw_hair, MASK_DIM, MASK_DIM, nx, ny);
+                            let is_hair_edge = hair_p_px > 0.14;
+                            let denom = fg_a.max(0.28);
+                            let solved_r = ((r - (1.0 - fg_a) * br) / denom).clamp(0.0, 1.0);
+                            let solved_g = ((g - (1.0 - fg_a) * bg_c) / denom).clamp(0.0, 1.0);
+                            let solved_b = ((b - (1.0 - fg_a) * bb) / denom).clamp(0.0, 1.0);
+                            let trust_solved = smoothstep(0.18, 0.54, fg_a);
+                            let mut pure_r = fr * (1.0 - trust_solved) + solved_r * trust_solved;
+                            let mut pure_g = fg_c * (1.0 - trust_solved) + solved_g * trust_solved;
+                            let mut pure_b = fb * (1.0 - trust_solved) + solved_b * trust_solved;
+                            if params.bg_decontam {
+                                let spill_w = if is_hair_edge {
+                                    ((1.0 - fg_a) * 0.72).clamp(0.0, 0.72)
+                                } else {
+                                    ((1.0 - fg_a) * 0.32).clamp(0.0, 0.32)
+                                };
+                                let pull_r = (pure_r - (br - bg_mean_r * 0.5).max(0.0) * 0.35).clamp(0.0, 1.0);
+                                let pull_g = (pure_g - (bg_c - bg_mean_g * 0.5).max(0.0) * 0.35).clamp(0.0, 1.0);
+                                let pull_b = (pure_b - (bb - bg_mean_b * 0.5).max(0.0) * 0.35).clamp(0.0, 1.0);
+                                if is_hair_edge && !params.is_highres_matte {
+                                    let d_lum = (0.299 * pure_r + 0.587 * pure_g + 0.114 * pure_b).clamp(0.0, 1.0);
+                                    let neut_r = d_lum * 0.55 + pull_r * 0.45;
+                                    let neut_g = d_lum * 0.55 + pull_g * 0.45;
+                                    let neut_b = d_lum * 0.55 + pull_b * 0.45;
+                                    pure_r = pure_r * (1.0 - spill_w) + neut_r * spill_w;
+                                    pure_g = pure_g * (1.0 - spill_w) + neut_g * spill_w;
+                                    pure_b = pure_b * (1.0 - spill_w) + neut_b * spill_w;
+                                } else {
+                                    // Avoid desaturating warm skin/arms into grey halos at solid edges
+                                    pure_r = pure_r * (1.0 - spill_w) + pull_r * spill_w;
+                                    pure_g = pure_g * (1.0 - spill_w) + pull_g * spill_w;
+                                    pure_b = pure_b * (1.0 - spill_w) + pull_b * spill_w;
+                                }
+                            }
+                            let edge_w = if is_hair_edge {
+                                ((1.0 - smoothstep(0.45, 0.90, fg_a))
+                                    * if params.bg_decontam { 1.0 } else { 0.75 })
+                                .clamp(0.0, 1.0)
+                            } else {
+                                ((1.0 - smoothstep(0.40, 0.78, fg_a))
+                                    * if params.bg_decontam { 0.92 } else { 0.65 })
+                                .clamp(0.0, 1.0)
+                            };
+                            r = r * (1.0 - edge_w) + pure_r * edge_w;
+                            g = g * (1.0 - edge_w) + pure_g * edge_w;
+                            b = b * (1.0 - edge_w) + pure_b * edge_w;
+                        }
+                    } else {
+                        let bg_mask = (1.0 - fg_a).clamp(0.0, 1.0);
+                        let bg_blur_str = params.bg_blur_bokeh / 100.0;
+                        let stray_str = params.stray_hair / 100.0;
+                        let clean_str = (params.backdrop_clean / 100.0).max(if params.bg_clean_defects { 0.72 } else { 0.0 });
+                        let band_str = (params.backdrop_banding_fix / 100.0).max(if params.bg_remove_banding { 0.78 } else { 0.0 });
 
-                if params.sky_enhance > 0.5 && bg_mask > 0.05 && ny < 0.60 {
-                    let sky_a = bg_mask * (params.sky_enhance / 100.0) * (1.0 - ny * 1.5).clamp(0.0, 1.0) * 0.42;
-                    r *= 1.0 - sky_a * 0.35;
-                    g *= 1.0 - sky_a * 0.10;
-                    b = (b + sky_a * 0.28).min(1.0);
-                }
+                        if !blur_bokeh.is_empty() && bg_mask > 0.01 {
+                            let rb = blur_bokeh[idx];
+                            let gb = blur_bokeh[idx + 1];
+                            let bb = blur_bokeh[idx + 2];
 
-                if params.bg_replace_mode != "original" {
-                    let b_mix = bg_mask;
-                    let fg_mix = (1.0 - bg_mask).clamp(0.0, 1.0);
-                    match params.bg_replace_mode.as_str() {
-                        "warm_beige" if b_mix > 0.02 => {
-                            r = r * (1.0 - b_mix * 0.85) + 0.92 * (b_mix * 0.85);
-                            g = g * (1.0 - b_mix * 0.85) + 0.86 * (b_mix * 0.85);
-                            b = b * (1.0 - b_mix * 0.85) + 0.78 * (b_mix * 0.85);
+                            if stray_str > 0.005 && bg_mask > 0.15 && ny < face.mouth_y + 0.08 {
+                                let sa = (stray_str * bg_mask * 0.88).clamp(0.0, 0.94);
+                                r = r * (1.0 - sa) + rb * sa;
+                                g = g * (1.0 - sa) + gb * sa;
+                                b = b * (1.0 - sa) + bb * sa;
+                            }
+                            if params.bg_clean_distractions && bg_mask > 0.04 {
+                                let dev = (r - rb).abs() + (g - gb).abs() + (b - bb).abs();
+                                let spot_w = (smoothstep(0.05, 0.22, dev) * bg_mask * 0.92).clamp(0.0, 0.95);
+                                r = r * (1.0 - spot_w) + rb * spot_w;
+                                g = g * (1.0 - spot_w) + gb * spot_w;
+                                b = b * (1.0 - spot_w) + bb * spot_w;
+                            }
+                            if bg_blur_str > 0.005 {
+                                let ba = (bg_mask * bg_blur_str).clamp(0.0, 0.98);
+                                r = r * (1.0 - ba) + rb * ba;
+                                g = g * (1.0 - ba) + gb * ba;
+                                b = b * (1.0 - ba) + bb * ba;
+                            }
+                            if clean_str > 0.005 && bg_mask > 0.02 {
+                                let ca = (bg_mask * clean_str * 0.85).clamp(0.0, 0.92);
+                                r = r * (1.0 - ca) + rb * ca;
+                                g = g * (1.0 - ca) + gb * ca;
+                                b = b * (1.0 - ca) + bb * ca;
+                            }
+                            if band_str > 0.005 && bg_mask > 0.02 {
+                                let bf_a = (bg_mask * band_str * 0.82).clamp(0.0, 0.92);
+                                let dither = ((((x * 1973 + y * 9277) ^ 0x68bc21eb) & 0xff) as f32 / 255.0 - 0.5) * 0.006;
+                                r = r * (1.0 - bf_a) + (rb + dither) * bf_a;
+                                g = g * (1.0 - bf_a) + (gb + dither) * bf_a;
+                                b = b * (1.0 - bf_a) + (bb + dither) * bf_a;
+                            }
                         }
-                        "studio_grey" if b_mix > 0.02 => {
-                            r = r * (1.0 - b_mix * 0.88) + 0.48 * (b_mix * 0.88);
-                            g = g * (1.0 - b_mix * 0.88) + 0.50 * (b_mix * 0.88);
-                            b = b * (1.0 - b_mix * 0.88) + 0.53 * (b_mix * 0.88);
+
+                        if params.bg_even_brightness && bg_mask > 0.02 {
+                            let cur_l = (0.299 * r + 0.587 * g + 0.114 * b).max(0.02);
+                            let even_w = (bg_mask * 0.68).clamp(0.0, 0.82);
+                            let target_l = cur_l + (bg_mean_luma - cur_l) * even_w;
+                            let mult = (target_l / cur_l).clamp(0.55, 2.1);
+                            r = (r * mult) * (1.0 - even_w * 0.22) + bg_mean_r * (even_w * 0.22);
+                            g = (g * mult) * (1.0 - even_w * 0.22) + bg_mean_g * (even_w * 0.22);
+                            b = (b * mult) * (1.0 - even_w * 0.22) + bg_mean_b * (even_w * 0.22);
                         }
-                        "passport_blue" if b_mix > 0.02 => {
-                            r = r * (1.0 - b_mix * 0.90) + 0.22 * (b_mix * 0.90);
-                            g = g * (1.0 - b_mix * 0.90) + 0.46 * (b_mix * 0.90);
-                            b = b * (1.0 - b_mix * 0.90) + 0.78 * (b_mix * 0.90);
+
+                        if params.sky_enhance > 0.5 && bg_mask > 0.05 && ny < 0.60 {
+                            let sky_a = bg_mask * (params.sky_enhance / 100.0) * (1.0 - ny * 1.5).clamp(0.0, 1.0) * 0.42;
+                            r *= 1.0 - sky_a * 0.35;
+                            g *= 1.0 - sky_a * 0.10;
+                            b = (b + sky_a * 0.28).min(1.0);
                         }
-                        "pure_white" if b_mix > 0.02 => {
-                            r = r * (1.0 - b_mix * 0.96) + 0.98 * (b_mix * 0.96);
-                            g = g * (1.0 - b_mix * 0.96) + 0.98 * (b_mix * 0.96);
-                            b = b * (1.0 - b_mix * 0.96) + 0.98 * (b_mix * 0.96);
-                        }
-                        "moody_black" if b_mix > 0.02 => {
-                            r *= 1.0 - b_mix * 0.92;
-                            g *= 1.0 - b_mix * 0.92;
-                            b *= 1.0 - b_mix * 0.90;
-                        }
-                        "sky_golden_sunset" => {
-                            let h_grad = ny.clamp(0.0, 1.0);
-                            let cloud = ((nx * 9.0 + ny * 4.0).sin() * (nx * 15.0 - ny * 7.0).cos()).max(0.0) * 0.14;
-                            let sr = (0.98 - h_grad * 0.12 + cloud).clamp(0.0, 1.0);
-                            let sg = (0.52 + h_grad * 0.22 + cloud * 0.8).clamp(0.0, 1.0);
-                            let sb = (0.34 + (1.0 - h_grad) * 0.28 + cloud * 0.5).clamp(0.0, 1.0);
-                            let sky_w = (b_mix * 0.92).clamp(0.0, 1.0);
-                            r = r * (1.0 - sky_w) + sr * sky_w + fg_mix * 0.045;
-                            g = g * (1.0 - sky_w) + sg * sky_w + fg_mix * 0.015;
-                            b = b * (1.0 - sky_w) + sb * sky_w - fg_mix * 0.025;
-                        }
-                        "sky_alpine_blue" => {
-                            let h_grad = ny.clamp(0.0, 1.0);
-                            let cloud = ((nx * 11.0 + 1.2).sin() * (ny * 8.0 + 0.5).cos()).max(0.0).powi(2) * 0.26 * (1.0 - h_grad * 0.6);
-                            let sr = (0.18 + h_grad * 0.48 + cloud).clamp(0.0, 1.0);
-                            let sg = (0.48 + h_grad * 0.36 + cloud).clamp(0.0, 1.0);
-                            let sb = (0.88 + h_grad * 0.10 + cloud * 0.5).clamp(0.0, 1.0);
-                            let sky_w = (b_mix * 0.92).clamp(0.0, 1.0);
-                            r = r * (1.0 - sky_w) + sr * sky_w - fg_mix * 0.015;
-                            g = g * (1.0 - sky_w) + sg * sky_w + fg_mix * 0.008;
-                            b = b * (1.0 - sky_w) + sb * sky_w + fg_mix * 0.032;
-                        }
-                        "sky_dramatic_clouds" => {
-                            let h_grad = ny.clamp(0.0, 1.0);
-                            let storm = ((nx * 7.5).sin() * (ny * 6.0).cos() * 0.5 + 0.5) * 0.22;
-                            let sr = (0.24 + h_grad * 0.26 + storm).clamp(0.0, 1.0);
-                            let sg = (0.28 + h_grad * 0.26 + storm).clamp(0.0, 1.0);
-                            let sb = (0.36 + h_grad * 0.24 + storm * 1.1).clamp(0.0, 1.0);
-                            let sky_w = (b_mix * 0.92).clamp(0.0, 1.0);
-                            r = r * (1.0 - sky_w) + sr * sky_w - fg_mix * 0.02;
-                            g = g * (1.0 - sky_w) + sg * sky_w - fg_mix * 0.01;
-                            b = b * (1.0 - sky_w) + sb * sky_w + fg_mix * 0.025;
-                        }
-                        "sky_night_stars" => {
-                            let h_grad = ny.clamp(0.0, 1.0);
-                            let star_hash = (((x * 747796405 + y * 2891336453) ^ 0x27d4eb2d) & 0xfff) as f32 / 4095.0;
-                            let star = if star_hash > 0.996 && ny < 0.65 { 0.85 } else { 0.0 };
-                            let sr = (0.05 + h_grad * 0.08 + star).clamp(0.0, 1.0);
-                            let sg = (0.08 + h_grad * 0.12 + star).clamp(0.0, 1.0);
-                            let sb = (0.18 + h_grad * 0.18 + star).clamp(0.0, 1.0);
-                            let sky_w = (b_mix * 0.94).clamp(0.0, 1.0);
-                            r = r * (1.0 - sky_w) + sr * sky_w - fg_mix * 0.035;
-                            g = g * (1.0 - sky_w) + sg * sky_w - fg_mix * 0.020;
-                            b = b * (1.0 - sky_w) + sb * sky_w + fg_mix * 0.040;
-                        }
-                        _ => {}
                     }
                 }
 
@@ -2618,11 +4525,11 @@ pub fn apply_retouch_pipeline(
             let ny = y as f32 / hf;
             for x in 0..w {
                 let nx = x as f32 / wf;
-                let (mut r, mut g, mut b) = if needs_warp {
+                let (mut r, mut g, mut b, warp_fg_a) = if needs_warp {
                     let mut sx = if params.flip_horizontal { 1.0 - nx } else { nx };
                     let mut sy = ny;
 
-                    // Perspective Keystone & Free Rotation
+                    // Perspective Keystone & Aspect-Preserving Fine Rotation
                     if params.rotate_angle.abs() > 0.1
                         || params.keystone_vertical.abs() > 0.3
                         || params.keystone_horizontal.abs() > 0.3
@@ -2633,8 +4540,11 @@ pub fn apply_retouch_pipeline(
                         let kh = (params.keystone_horizontal / 100.0) * 0.28;
                         cx *= 1.0 + cy * kv;
                         cy *= 1.0 + cx * kh;
-                        let rx = cx * cos_r - cy * sin_r;
-                        let ry = cx * sin_r + cy * cos_r;
+                        // Rotate in pixel space so non-square portraits do not shear
+                        let ax = cx * wf;
+                        let ay = cy * hf;
+                        let rx = (ax * cos_r - ay * sin_r) / wf;
+                        let ry = (ax * sin_r + ay * cos_r) / hf;
                         sx = rx + 0.5;
                         sy = ry + 0.5;
                     }
@@ -2867,13 +4777,32 @@ pub fn apply_retouch_pipeline(
                         pr = sample_bilinear(&retouched_rgb, w, h, (sx + cx * kr) * wf, (sy + cy * kr) * hf).0;
                         pb = sample_bilinear(&retouched_rgb, w, h, (sx + cx * kb) * wf, (sy + cy * kb) * hf).2;
                     }
-                    (pr, pg, pb)
+                    let fg_a = if is_replacing {
+                        if sx < 0.0 || sx > 1.0 || sy < 0.0 || sy > 1.0 {
+                            0.0
+                        } else if let Some(ref gm) = guided_matte {
+                            sample_alpha_unit(&gm.fg_alpha, w, h, sx * wf, sy * hf)
+                        } else {
+                            1.0
+                        }
+                    } else {
+                        1.0
+                    };
+                    (pr, pg, pb, fg_a)
                 } else {
                     let idx = (y * w + x) * 3;
-                    (retouched_rgb[idx], retouched_rgb[idx + 1], retouched_rgb[idx + 2])
+                    let fg_a = if is_replacing {
+                        guided_matte
+                            .as_ref()
+                            .map(|gm| gm.fg_alpha[y * w + x])
+                            .unwrap_or(1.0)
+                    } else {
+                        1.0
+                    };
+                    (retouched_rgb[idx], retouched_rgb[idx + 1], retouched_rgb[idx + 2], fg_a)
                 };
 
-                // Defringe: desaturate purple / green fringes on bright areas
+                // Defringe: desaturate purple / green fringes on bright subject boundaries before compositing
                 if params.optics_defringe_purple > 0.5 || params.optics_defringe_green > 0.5 {
                     let (hh, ss, vv) = rgb_to_hsv(r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0));
                     let band = |c: f32, wd: f32| -> f32 {
@@ -2894,18 +4823,154 @@ pub fn apply_retouch_pipeline(
                     }
                 }
 
-                // Film grain: size, roughness, strongest in midtones
+                // Background replacement composite in clean output space (keeps studio white & replaced scenes
+                // crisp, unstretched by facial/body liquify, and immune to foreground exposure/vignette darkening)
+                let mut out_alpha: u8 = 255;
+                if is_replacing {
+                    let a = warp_fg_a.clamp(0.0, 1.0);
+                    if is_transparent_bg {
+                        out_alpha = (a * 255.0).round().clamp(0.0, 255.0) as u8;
+                        if out_alpha == 0 {
+                            r = 0.0;
+                            g = 0.0;
+                            b = 0.0;
+                        }
+                    } else {
+                        let (mut br, mut bg_c, mut bb) = eval_replaced_background(
+                            params,
+                            custom_bg_rgb,
+                            &custom_bg_buf,
+                            x,
+                            y,
+                            w,
+                            h,
+                        );
+                        if params.treatment == "bw" {
+                            let lum = (0.299 * br + 0.587 * bg_c + 0.114 * bb).clamp(0.0, 1.0);
+                            br = lum;
+                            bg_c = lum;
+                            bb = lum;
+                        }
+
+                        if params.bg_ground_reflect && ny > 0.72 && a < 0.85 {
+                            let ry_n = (2.0 * 0.85 - ny).clamp(0.0, 0.85);
+                            let (rr_r, rr_g, rr_b) = sample_bilinear(&retouched_rgb, w, h, nx * wf, ry_n * hf);
+                            let ra = guided_matte
+                                .as_ref()
+                                .map(|gm| sample_alpha_unit(&gm.fg_alpha, w, h, nx * wf, ry_n * hf))
+                                .unwrap_or(0.0);
+                            let fade = (1.0 - smoothstep(0.73, 0.99, ny)) * smoothstep(0.71, 0.76, ny);
+                            let refl_w = (ra * fade * 0.34).clamp(0.0, 0.38);
+                            if refl_w > 0.002 {
+                                br = br * (1.0 - refl_w) + (br * 0.35 + rr_r * 0.65) * refl_w;
+                                bg_c = bg_c * (1.0 - refl_w) + (bg_c * 0.35 + rr_g * 0.65) * refl_w;
+                                bb = bb * (1.0 - refl_w) + (bb * 0.35 + rr_b * 0.65) * refl_w;
+                            }
+                        }
+
+                        if let Some((ref sh_plane, sw, sh, off_x, off_y)) = cast_shadow {
+                            let sh_raw = sample_plane_bilinear(sh_plane, sw, sh, nx - off_x, ny - off_y).clamp(0.0, 1.0);
+                            let sh_op = (params.bg_shadow_opacity / 100.0).clamp(0.0, 1.0) * sh_raw;
+                            if sh_op > 0.002 {
+                                let shift_t = (params.bg_shadow_shift / 100.0).clamp(0.0, 1.0);
+                                let st_r = 0.03 * (1.0 - shift_t) + (br * 0.32) * shift_t;
+                                let st_g = 0.03 * (1.0 - shift_t) + (bg_c * 0.28) * shift_t;
+                                let st_b = 0.04 * (1.0 - shift_t) + (bb * 0.26) * shift_t;
+                                let apply_sh = |bc: f32, sc: f32| -> f32 {
+                                    let blended = match params.bg_shadow_blend_mode.as_str() {
+                                        "normal" => sc,
+                                        "darken" => bc.min(sc),
+                                        "soft_light" => (bc * (0.45 + 0.55 * sc)).clamp(0.0, 1.0),
+                                        _ => bc * (1.0 - 0.85 * (1.0 - sc)),
+                                    };
+                                    (bc * (1.0 - sh_op) + blended * sh_op).clamp(0.0, 1.0)
+                                };
+                                br = apply_sh(br, st_r);
+                                bg_c = apply_sh(bg_c, st_g);
+                                bb = apply_sh(bb, st_b);
+                            }
+                        }
+
+                        if params.bg_preserve_shadow && ny > 0.45 && a < 0.78 {
+                            let orig_lum = (0.299 * r + 0.587 * g + 0.114 * b).clamp(0.0, 1.0);
+                            let sh_ratio = (orig_lum / bg_mean_luma.max(0.18)).clamp(0.32, 1.0);
+                            let ground_w = smoothstep(0.45, 0.78, ny) * 0.76;
+                            let mult = 1.0 - ground_w * (1.0 - sh_ratio);
+                            br *= mult;
+                            bg_c *= mult;
+                            bb *= mult;
+                        }
+
+                        let blend_ch = |orig: f32, bgv: f32| -> f32 {
+                            match params.bg_blend_mode.as_str() {
+                                "multiply" => (orig * bgv).clamp(0.0, 1.0),
+                                "screen" => (1.0 - (1.0 - orig) * (1.0 - bgv)).clamp(0.0, 1.0),
+                                "overlay" => {
+                                    if orig < 0.5 {
+                                        (2.0 * orig * bgv).clamp(0.0, 1.0)
+                                    } else {
+                                        (1.0 - 2.0 * (1.0 - orig) * (1.0 - bgv)).clamp(0.0, 1.0)
+                                    }
+                                }
+                                "soft_light" => ((1.0 - 2.0 * bgv) * orig * orig + 2.0 * bgv * orig).clamp(0.0, 1.0),
+                                _ => bgv,
+                            }
+                        };
+                        br = blend_ch(r, br);
+                        bg_c = blend_ch(g, bg_c);
+                        bb = blend_ch(b, bb);
+
+                        let area_w = if params.bg_fill_area == "outer_only" {
+                            1.0 - smoothstep(0.84, 0.99, ny) * 0.85
+                        } else {
+                            1.0
+                        };
+                        let rep_op = ((params.bg_replace_opacity / 100.0).clamp(0.0, 1.0) * area_w).clamp(0.0, 1.0);
+                        if rep_op < 0.999 {
+                            br = r * (1.0 - rep_op) + br * rep_op;
+                            bg_c = g * (1.0 - rep_op) + bg_c * rep_op;
+                            bb = b * (1.0 - rep_op) + bb * rep_op;
+                        }
+
+                        if a > 0.01 && !is_studio_solid_bg(&params.bg_replace_mode) {
+                            let rim_wrap = ((1.0 - a * 0.4) * 0.05).clamp(0.0, 0.05);
+                            r = r * (1.0 - rim_wrap) + br * rim_wrap;
+                            g = g * (1.0 - rim_wrap) + bg_c * rim_wrap;
+                            b = b * (1.0 - rim_wrap) + bb * rim_wrap;
+                        }
+                        r = r * a + br * (1.0 - a);
+                        g = g * a + bg_c * (1.0 - a);
+                        b = b * a + bb * (1.0 - a);
+                    }
+                }
+
+                // Film grain: size, roughness, strongest in midtones (preserve flat studio backdrop)
                 if params.film_grain > 0.5 {
-                    let gr = lc_grain_noise(x as f32, y as f32, params.film_grain, params.grain_size, params.grain_roughness);
-                    let l = ((r + g + b) / 3.0).clamp(0.0, 1.0);
-                    let lw = 0.45 + 0.55 * 4.0 * l * (1.0 - l);
-                    r += gr * lw;
-                    g += gr * lw;
-                    b += gr * lw;
+                    let grain_mask = if is_replacing && is_studio_solid_bg(&params.bg_replace_mode) {
+                        warp_fg_a.clamp(0.0, 1.0)
+                    } else {
+                        1.0
+                    };
+                    if grain_mask > 0.01 {
+                        let gr = lc_grain_noise(
+                            x as f32,
+                            y as f32,
+                            params.film_grain,
+                            params.grain_size,
+                            params.grain_roughness,
+                        ) * grain_mask;
+                        let l = ((r + g + b) / 3.0).clamp(0.0, 1.0);
+                        let lw = 0.45 + 0.55 * 4.0 * l * (1.0 - l);
+                        r += gr * lw;
+                        g += gr * lw;
+                        b += gr * lw;
+                    }
                 }
 
                 // Post-crop vignette: amount, midpoint, roundness, feather, highlight priority
-                if params.vignette.abs() > 0.5 {
+                if params.vignette.abs() > 0.5
+                    && !(is_replacing && is_studio_solid_bg(&params.bg_replace_mode))
+                {
                     let ro = params.vignette_roundness / 100.0;
                     let aspect = hf / wf;
                     let vx = (nx - 0.5) * 2.0;
@@ -2926,8 +4991,8 @@ pub fn apply_retouch_pipeline(
                     b *= v_mult;
                 }
 
-                // Lens-profile vignetting correction (positive brightens the corners)
-                if params.optics_vignetting.abs() > 0.5 {
+                // Lens-profile vignetting correction (applies only to original captured background)
+                if params.optics_vignetting.abs() > 0.5 && !is_replacing {
                     let vx = (nx - 0.5) * 2.0;
                     let vy = (ny - 0.5) * 2.0;
                     let d = (vx * vx + vy * vy).sqrt() / std::f32::consts::SQRT_2;
@@ -2943,7 +5008,7 @@ pub fn apply_retouch_pipeline(
                 row_out[out_idx] = (r.clamp(0.0, 1.0) * 255.0).round() as u8;
                 row_out[out_idx + 1] = (g.clamp(0.0, 1.0) * 255.0).round() as u8;
                 row_out[out_idx + 2] = (b.clamp(0.0, 1.0) * 255.0).round() as u8;
-                row_out[out_idx + 3] = 255;
+                row_out[out_idx + 3] = out_alpha;
             }
         });
 
@@ -2970,6 +5035,18 @@ fn encode_jpeg_data_url(img: &RgbaImage, quality: u8) -> Result<String, String> 
         .map_err(|e| format!("JPEG encode error: {}", e))?;
     Ok(format!(
         "data:image/jpeg;base64,{}",
+        BASE64.encode(buf.into_inner())
+    ))
+}
+
+fn encode_png_data_url(img: &RgbaImage) -> Result<String, String> {
+    let mut buf = Cursor::new(Vec::new());
+    let dyn_img = DynamicImage::ImageRgba8(img.clone());
+    dyn_img
+        .write_to(&mut buf, ImageFormat::Png)
+        .map_err(|e| format!("PNG encode error: {}", e))?;
+    Ok(format!(
+        "data:image/png;base64,{}",
         BASE64.encode(buf.into_inner())
     ))
 }
@@ -3226,15 +5303,19 @@ fn load_photo_from_path_cmd(file_path: String) -> Result<ImportedPhotoPayload, S
     let orig_w = dyn_img.width();
     let orig_h = dyn_img.height();
 
-    let master = if orig_w > 2200 || orig_h > 2200 {
-        dyn_img.resize(2200, 2200, image::imageops::FilterType::Lanczos3)
+    // Keep original resolution up to 6000 px on the long edge so portrait detail
+    // is preserved. Only downsample extremely large files (e.g. 50 MP+ medium-format)
+    // to stay within reasonable memory and IPC limits.
+    let master = if orig_w > 6000 || orig_h > 6000 {
+        dyn_img.resize(6000, 6000, image::imageops::FilterType::Lanczos3)
     } else {
         dyn_img
     };
 
     let rgba = master.to_rgba8();
     let detected_face = detect_face_region(&rgba);
-    let data_url = encode_jpeg_data_url(&rgba, 94)?;
+    // Quality 97 — single lossy encode; keeps fine detail for Rust retouch pipeline.
+    let data_url = encode_jpeg_data_url(&rgba, 97)?;
 
     Ok(ImportedPhotoPayload {
         path: file_path,
@@ -3277,12 +5358,19 @@ fn analyze_portrait_cmd(image_base64: String) -> Result<FaceRegion, String> {
     Ok(detect_face_region(&rgba))
 }
 
+fn decode_optional_rgba(b64: Option<&str>) -> Option<RgbaImage> {
+    b64.filter(|s| !s.trim().is_empty())
+        .and_then(|s| decode_data_url(s).ok())
+        .map(|d| d.to_rgba8())
+}
+
 #[tauri::command]
 fn process_photo_cmd(
     image_base64: String,
     params: RetouchParams,
     high_quality: bool,
     mask_base64: Option<String>,
+    scene_mask_base64: Option<String>,
 ) -> Result<ProcessResult, String> {
     let start = std::time::Instant::now();
     let dyn_img = decode_data_url(&image_base64)?;
@@ -3296,10 +5384,8 @@ fn process_photo_cmd(
         dyn_img.to_rgba8()
     };
 
-    let decoded_mask = mask_base64
-        .as_deref()
-        .and_then(|b64| decode_data_url(b64).ok())
-        .map(|d| d.to_rgba8());
+    let decoded_mask = decode_optional_rgba(mask_base64.as_deref());
+    let decoded_scene = decode_optional_rgba(scene_mask_base64.as_deref());
 
     let mut active_params = params;
     if active_params.face.face_rx <= 0.01 {
@@ -3307,9 +5393,18 @@ fn process_photo_cmd(
     }
     let detected = active_params.face.clone();
 
-    let result_rgba = apply_retouch_pipeline(&working_img, &active_params, decoded_mask.as_ref());
+    let result_rgba = apply_retouch_pipeline_with_scene(
+        &working_img,
+        &active_params,
+        decoded_mask.as_ref(),
+        decoded_scene.as_ref(),
+    );
     let quality = if high_quality { 95 } else { 90 };
-    let data_url = encode_jpeg_data_url(&result_rgba, quality)?;
+    let data_url = if active_params.bg_replace_mode == "transparent" {
+        encode_png_data_url(&result_rgba)?
+    } else {
+        encode_jpeg_data_url(&result_rgba, quality)?
+    };
 
     Ok(ProcessResult {
         data_url,
@@ -3320,26 +5415,106 @@ fn process_photo_cmd(
     })
 }
 
+/// Apply interactive crop rectangle (if non-full), fallback aspect-ratio crop, and optional
+/// high-quality Lanczos3 export dimension resize.
+fn apply_crop_and_resize(rgba: RgbaImage, params: &RetouchParams) -> DynamicImage {
+    let mut img = DynamicImage::ImageRgba8(rgba);
+    let iw = img.width().max(1);
+    let ih = img.height().max(1);
+
+    let has_explicit_box = params.crop_w > 0.01
+        && params.crop_h > 0.01
+        && (params.crop_x > 0.001
+            || params.crop_y > 0.001
+            || params.crop_w < 0.999
+            || params.crop_h < 0.999);
+
+    if has_explicit_box {
+        let cx = ((params.crop_x.clamp(0.0, 0.98) * iw as f32).round() as u32).min(iw - 1);
+        let cy = ((params.crop_y.clamp(0.0, 0.98) * ih as f32).round() as u32).min(ih - 1);
+        let cw = ((params.crop_w.clamp(0.01, 1.0) * iw as f32).round() as u32)
+            .max(1)
+            .min(iw - cx);
+        let ch = ((params.crop_h.clamp(0.01, 1.0) * ih as f32).round() as u32)
+            .max(1)
+            .min(ih - cy);
+        img = img.crop_imm(cx, cy, cw, ch);
+    } else if params.crop_aspect_w > 0.1 && params.crop_aspect_h > 0.1 {
+        let target_ratio = params.crop_aspect_w / params.crop_aspect_h;
+        let src_ratio = iw as f32 / ih as f32;
+        let (cx, cy, cw, ch) = if src_ratio > target_ratio {
+            let new_w = ((ih as f32 * target_ratio).round() as u32).clamp(1, iw);
+            let mut ox = (iw.saturating_sub(new_w)) / 2;
+            if (params.crop_align_eye || params.crop_align_vertical) && params.face.face_rx > 0.01 {
+                let target_cx = (params.face.center_x * iw as f32) as i32;
+                let desired_ox = target_cx - (new_w as i32) / 2;
+                ox = desired_ox.clamp(0, iw.saturating_sub(new_w) as i32) as u32;
+            }
+            (ox, 0, new_w, ih)
+        } else {
+            let new_h = ((iw as f32 / target_ratio).round() as u32).clamp(1, ih);
+            let mut oy = (ih.saturating_sub(new_h)) / 2;
+            if params.crop_align_eye && params.face.face_ry > 0.01 {
+                let eye_y_norm = (params.left_eye_mid_y()).min(0.95);
+                let eye_y_px = (eye_y_norm * ih as f32) as i32;
+                let desired_oy = eye_y_px - (new_h as f32 * 0.34) as i32;
+                oy = desired_oy.clamp(0, ih.saturating_sub(new_h) as i32) as u32;
+            } else if params.crop_align_vertical && params.face.face_ry > 0.01 {
+                let face_y_px = (params.face.center_y * ih as f32) as i32;
+                let desired_oy = face_y_px - (new_h as f32 * 0.40) as i32;
+                oy = desired_oy.clamp(0, ih.saturating_sub(new_h) as i32) as u32;
+            }
+            (0, oy, iw, new_h)
+        };
+        img = img.crop_imm(cx, cy, cw, ch);
+    }
+
+    let ew = if params.crop_custom_w > 0.5 { params.crop_custom_w.round() as u32 } else { 0 };
+    let eh = if params.crop_custom_h > 0.5 { params.crop_custom_h.round() as u32 } else { 0 };
+    if ew > 0 && eh > 0 {
+        img = img.resize_exact(ew, eh, image::imageops::FilterType::Lanczos3);
+    } else if ew > 0 {
+        let scale = ew as f32 / img.width().max(1) as f32;
+        let eh2 = ((img.height() as f32 * scale).round() as u32).max(1);
+        img = img.resize_exact(ew, eh2, image::imageops::FilterType::Lanczos3);
+    } else if eh > 0 {
+        let scale = eh as f32 / img.height().max(1) as f32;
+        let ew2 = ((img.width() as f32 * scale).round() as u32).max(1);
+        img = img.resize_exact(ew2, eh, image::imageops::FilterType::Lanczos3);
+    }
+    img
+}
+
+impl RetouchParams {
+    fn left_eye_mid_y(&self) -> f32 {
+        (self.face.left_eye_y + self.face.right_eye_y) * 0.5
+    }
+}
+
 #[tauri::command]
 fn export_photo_to_disk_cmd(
     image_base64: String,
     params: RetouchParams,
     output_path: String,
     mask_base64: Option<String>,
+    scene_mask_base64: Option<String>,
 ) -> Result<String, String> {
     let dyn_img = decode_data_url(&image_base64)?;
     let rgba = dyn_img.to_rgba8();
-    let decoded_mask = mask_base64
-        .as_deref()
-        .and_then(|b64| decode_data_url(b64).ok())
-        .map(|d| d.to_rgba8());
+    let decoded_mask = decode_optional_rgba(mask_base64.as_deref());
+    let decoded_scene = decode_optional_rgba(scene_mask_base64.as_deref());
 
     let mut active_params = params;
     if active_params.face.face_rx <= 0.01 {
         active_params.face = detect_face_region(&rgba);
     }
-    let result_rgba = apply_retouch_pipeline(&rgba, &active_params, decoded_mask.as_ref());
-    let dyn_out = DynamicImage::ImageRgba8(result_rgba);
+    let result_rgba = apply_retouch_pipeline_with_scene(
+        &rgba,
+        &active_params,
+        decoded_mask.as_ref(),
+        decoded_scene.as_ref(),
+    );
+    let dyn_out = apply_crop_and_resize(result_rgba, &active_params);
     if output_path.to_lowercase().ends_with(".png") {
         dyn_out
             .save_with_format(&output_path, ImageFormat::Png)
@@ -3352,6 +5527,253 @@ fn export_photo_to_disk_cmd(
     Ok(output_path)
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct HighresMattePayload {
+    pub matte_data_url: String,
+    pub width: u32,
+    pub height: u32,
+    pub elapsed_ms: u128,
+}
+
+#[tauri::command]
+async fn extract_highres_matte_cmd(image_base64: String) -> Result<HighresMattePayload, String> {
+    tauri::async_runtime::spawn_blocking(move || extract_highres_matte_blocking(image_base64))
+        .await
+        .map_err(|e| format!("Matting task join error: {e}"))?
+}
+
+fn extract_highres_matte_blocking(image_base64: String) -> Result<HighresMattePayload, String> {
+    let start = std::time::Instant::now();
+    let dyn_img = decode_data_url(&image_base64)?;
+    let (w, h) = (dyn_img.width(), dyn_img.height());
+
+    let script_paths = [
+        "scripts/extract_matte.py",
+        "../scripts/extract_matte.py",
+        "F:/Workspace/Code projects/2. Tool Media by Doan/Collabs-Retouch-Pro/scripts/extract_matte.py",
+    ];
+    let script = script_paths.iter().find(|p| std::path::Path::new(p).exists())
+        .ok_or_else(|| "Could not locate extract_matte.py".to_string())?;
+
+    let py_interpreters = [
+        "F:/Workspace/Code projects/LiYing-master/python-embed/python.exe",
+        "F:/Workspace/Code projects/LiYing/python-embed/python.exe",
+        "python-embed/python.exe",
+        "../python-embed/python.exe",
+        "python",
+        "python3",
+    ];
+    let py = py_interpreters.iter().find(|p| {
+        if p.contains('/') || p.contains('\\') {
+            std::path::Path::new(p).exists()
+        } else {
+            true
+        }
+    }).ok_or_else(|| "Could not find python interpreter with onnxruntime".to_string())?;
+
+    let temp_dir = std::env::temp_dir();
+    let pid = std::process::id();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let temp_input = temp_dir.join(format!("retouch_in_{}_{}.jpg", pid, now));
+    let temp_output = temp_dir.join(format!("retouch_matte_{}_{}.png", pid, now));
+
+    dyn_img.to_rgb8().save(&temp_input).map_err(|e| e.to_string())?;
+
+    let mut cmd = std::process::Command::new(py);
+    cmd.arg(script).arg(&temp_input).arg(&temp_output);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+    }
+    let output = cmd
+        .output()
+        .map_err(|e| format!("Failed to spawn python matting: {e}"))?;
+
+    let _ = std::fs::remove_file(&temp_input);
+
+    if !output.status.success() {
+        let err_str = String::from_utf8_lossy(&output.stderr);
+        let _ = std::fs::remove_file(&temp_output);
+        return Err(format!("Matting inference failed: {err_str}"));
+    }
+
+    if !temp_output.exists() {
+        return Err("Matting output file was not produced".to_string());
+    }
+
+    let matte_bytes = std::fs::read(&temp_output).map_err(|e| e.to_string())?;
+    let _ = std::fs::remove_file(&temp_output);
+
+    let matte_b64 = BASE64.encode(&matte_bytes);
+    let matte_data_url = format!("data:image/png;base64,{}", matte_b64);
+
+    Ok(HighresMattePayload {
+        matte_data_url,
+        width: w,
+        height: h,
+        elapsed_ms: start.elapsed().as_millis(),
+    })
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct LiyingResultPayload {
+    pub data_url: String,
+    pub width: u32,
+    pub height: u32,
+    pub elapsed_ms: u128,
+    pub straightened: bool,
+    pub matte_data_url: Option<String>,
+}
+
+#[tauri::command]
+async fn liying_change_background_cmd(
+    image_base64: String,
+    color: String,
+    transparent: bool,
+    straighten: bool,
+    level_only: bool,
+) -> Result<LiyingResultPayload, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        liying_change_background_blocking(image_base64, color, transparent, straighten, level_only)
+    })
+    .await
+    .map_err(|e| format!("LiYing task join error: {e}"))?
+}
+
+fn liying_change_background_blocking(
+    image_base64: String,
+    color: String,
+    transparent: bool,
+    straighten: bool,
+    level_only: bool,
+) -> Result<LiyingResultPayload, String> {
+    let start = std::time::Instant::now();
+    let dyn_img = decode_data_url(&image_base64)?;
+
+    let script_paths = [
+        "scripts/liying_process.py",
+        "../scripts/liying_process.py",
+        "F:/Workspace/Code projects/2. Tool Media by Doan/Collabs-Retouch-Pro/scripts/liying_process.py",
+    ];
+    let script = script_paths
+        .iter()
+        .find(|p| std::path::Path::new(p).exists())
+        .ok_or_else(|| "Could not locate liying_process.py".to_string())?;
+
+    let py_interpreters = [
+        "F:/Workspace/Code projects/LiYing-master/python-embed/python.exe",
+        "F:/Workspace/Code projects/LiYing/python-embed/python.exe",
+        "python-embed/python.exe",
+        "../python-embed/python.exe",
+        "python",
+        "python3",
+    ];
+    let py = py_interpreters
+        .iter()
+        .find(|p| {
+            if p.contains('/') || p.contains('\\') {
+                std::path::Path::new(p).exists()
+            } else {
+                true
+            }
+        })
+        .ok_or_else(|| "Could not find python interpreter with LiYing environment".to_string())?;
+
+    let temp_dir = std::env::temp_dir();
+    let pid = std::process::id();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let temp_input = temp_dir.join(format!("retouch_liying_in_{pid}_{now}.jpg"));
+    let temp_output = temp_dir.join(format!("retouch_liying_out_{pid}_{now}.png"));
+    let temp_matte = temp_dir.join(format!("retouch_liying_matte_{pid}_{now}.png"));
+
+    dyn_img
+        .to_rgb8()
+        .save(&temp_input)
+        .map_err(|e| format!("Failed to save temp input: {e}"))?;
+
+    let mut cmd = std::process::Command::new(py);
+    cmd.arg(script)
+        .arg("--input")
+        .arg(&temp_input)
+        .arg("--output")
+        .arg(&temp_output)
+        .arg("--matte-output")
+        .arg(&temp_matte)
+        .arg("--color")
+        .arg(&color);
+
+    if transparent {
+        cmd.arg("--transparent");
+    }
+    if straighten {
+        cmd.arg("--straighten");
+    }
+    if level_only {
+        cmd.arg("--level-only");
+    }
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+    }
+
+    let output = cmd
+        .output()
+        .map_err(|e| format!("Failed to spawn LiYing process: {e}"))?;
+
+    let _ = std::fs::remove_file(&temp_input);
+
+    if !output.status.success() {
+        let err_str = String::from_utf8_lossy(&output.stderr);
+        let _ = std::fs::remove_file(&temp_output);
+        let _ = std::fs::remove_file(&temp_matte);
+        return Err(format!("LiYing background replacement failed: {err_str}"));
+    }
+
+    if !temp_output.exists() {
+        let _ = std::fs::remove_file(&temp_matte);
+        return Err("LiYing output image was not produced".to_string());
+    }
+
+    let out_bytes = std::fs::read(&temp_output).map_err(|e| e.to_string())?;
+    let _ = std::fs::remove_file(&temp_output);
+
+    let matte_data_url = if temp_matte.exists() {
+        let m_bytes = std::fs::read(&temp_matte).ok();
+        let _ = std::fs::remove_file(&temp_matte);
+        m_bytes.map(|b| format!("data:image/png;base64,{}", BASE64.encode(b)))
+    } else {
+        None
+    };
+
+    let data_b64 = BASE64.encode(&out_bytes);
+    let data_url = format!("data:image/png;base64,{}", data_b64);
+
+    let decoded_out = image::load_from_memory(&out_bytes)
+        .map_err(|e| format!("Decode LiYing output error: {e}"))?;
+    let (w, h) = (decoded_out.width(), decoded_out.height());
+
+    let stdout_str = String::from_utf8_lossy(&output.stdout);
+    let straightened = stdout_str.contains("\"straightened\": true");
+
+    Ok(LiyingResultPayload {
+        data_url,
+        width: w,
+        height: h,
+        elapsed_ms: start.elapsed().as_millis(),
+        straightened,
+        matte_data_url,
+    })
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -3361,7 +5783,9 @@ fn main() {
             rotate_photo_90_cmd,
             analyze_portrait_cmd,
             process_photo_cmd,
-            export_photo_to_disk_cmd
+            export_photo_to_disk_cmd,
+            extract_highres_matte_cmd,
+            liying_change_background_cmd
         ])
         .run(tauri::generate_context!())
         .expect("error while running Retouch Pro");
@@ -3459,6 +5883,9 @@ mod slider_tests {
             let mut en2 = enabled.clone();
             en2["treatment"] = serde_json::json!("color");
             en2["hairDyeColor"] = serde_json::json!("espresso");
+            en2["clothingDewrinkle"] = serde_json::json!(60.0);
+            en2["clothingSweatStain"] = serde_json::json!(60.0);
+            en2["clothingEdgeSmooth"] = serde_json::json!(60.0);
             en2["colorMatchStats"] = serde_json::json!([0.4, 0.2, 0.5, 0.2, 0.3, 0.2]);
             en2["gradeShadowLum"] = serde_json::json!(40.0);
             let dead_portrait = dead_params(&pimg, &en2, Some(&still_dead));
@@ -3525,5 +5952,881 @@ mod slider_tests {
         v["bwRed"] = serde_json::json!(80.0);
         v["bwBlue"] = serde_json::json!(-80.0);
         assert_ne!(run(&img, &v), out);
+    }
+
+    fn make_portrait_cutout_fixture() -> (RgbaImage, RgbaImage, FaceRegion) {
+        let (w, h) = (160u32, 200u32);
+        let mut img = RgbaImage::new(w, h);
+        let mut scene = RgbaImage::new(w, h);
+        for y in 0..h {
+            let ny = y as f32 / h as f32;
+            for x in 0..w {
+                let nx = x as f32 / w as f32;
+                let in_hair = x >= 55 && x < 105 && y >= 24 && y < 60;
+                let in_head = x >= 60 && x < 100 && y >= 42 && y < 86;
+                let in_shirt = x >= 35 && x < 125 && y >= 86 && y < 168;
+                let in_trousers = x >= 44 && x < 116 && y >= 168;
+
+                let rgb = if in_hair {
+                    [20, 22, 26, 255]
+                } else if in_head {
+                    [210, 170, 145, 255]
+                } else if in_shirt {
+                    [180, 200, 218, 255]
+                } else if in_trousers {
+                    [122, 118, 108, 255]
+                } else {
+                    [45, 72, 96, 255]
+                };
+                img.put_pixel(x, y, image::Rgba(rgb));
+
+                let is_fg = in_hair || in_head || in_shirt || in_trousers;
+                let fg_u8 = if is_fg { 255u8 } else { 0u8 };
+                let cloth_u8 = if in_shirt || in_trousers { 255u8 } else { 0u8 };
+                let solid_u8 = if in_head || in_shirt || in_trousers { 255u8 } else { 0u8 };
+                scene.put_pixel(x, y, image::Rgba([fg_u8, cloth_u8, solid_u8, 255]));
+                let _ = (nx, ny);
+            }
+        }
+        let face = FaceRegion {
+            center_x: 0.50,
+            center_y: 0.30,
+            face_rx: 0.14,
+            face_ry: 0.14,
+            forehead_x: 0.50,
+            forehead_y: 0.21,
+            chin_x: 0.50,
+            chin_y: 0.43,
+            left_eye_x: 0.44,
+            left_eye_y: 0.28,
+            right_eye_x: 0.56,
+            right_eye_y: 0.28,
+            nose_x: 0.50,
+            nose_y: 0.33,
+            mouth_x: 0.50,
+            mouth_y: 0.38,
+            mouth_left_x: 0.46,
+            mouth_left_y: 0.38,
+            mouth_right_x: 0.54,
+            mouth_right_y: 0.38,
+            cheek_left_x: 0.38,
+            cheek_left_y: 0.33,
+            cheek_right_x: 0.62,
+            cheek_right_y: 0.33,
+            jaw_left_x: 0.40,
+            jaw_left_y: 0.39,
+            jaw_right_x: 0.60,
+            jaw_right_y: 0.39,
+        };
+        (img, scene, face)
+    }
+
+    #[test]
+    fn background_replace_preserves_lower_torso_and_trousers() {
+        let (img, scene, face) = make_portrait_cutout_fixture();
+        let mut params = RetouchParams::default();
+        params.face = face;
+        params.bg_replace_mode = "pure_white".to_string();
+        params.stray_hair = 80.0;
+        params.backdrop_clean = 85.0;
+
+        let out = apply_retouch_pipeline_with_scene(&img, &params, None, Some(&scene));
+        // Lower-body trousers well below torso_d2 ellipse must remain 100% preserved
+        let trouser_px = out.get_pixel(80, 190);
+        assert!(
+            (trouser_px[0] as i32 - 122).abs() <= 8
+                && (trouser_px[1] as i32 - 118).abs() <= 8
+                && (trouser_px[2] as i32 - 108).abs() <= 8,
+            "trousers were corrupted by geometric fallback: {:?}",
+            trouser_px.0
+        );
+        // Wide arm/shoulder inside neural foreground must stay intact
+        let sleeve_px = out.get_pixel(39, 120);
+        assert!(
+            (sleeve_px[0] as i32 - 180).abs() <= 12 && (sleeve_px[2] as i32 - 218).abs() <= 12,
+            "sleeve was overwritten: {:?}",
+            sleeve_px.0
+        );
+    }
+
+    #[test]
+    fn background_replace_pure_white_corners_stay_pure_despite_vignette() {
+        let (img, scene, face) = make_portrait_cutout_fixture();
+        let mut params = RetouchParams::default();
+        params.face = face;
+        params.bg_replace_mode = "pure_white".to_string();
+        params.vignette = 40.0;
+        params.optics_vignetting = -50.0;
+
+        let out = apply_retouch_pipeline_with_scene(&img, &params, None, Some(&scene));
+        for &(cx, cy) in &[(4, 4), (155, 4), (4, 195), (155, 195)] {
+            let p = out.get_pixel(cx, cy);
+            assert!(
+                p[0] >= 254 && p[1] >= 254 && p[2] >= 254,
+                "pure_white corner ({cx},{cy}) was darkened to {:?}",
+                p.0
+            );
+        }
+    }
+
+    #[test]
+    fn guided_matte_eliminates_blurry_halo_at_sharp_boundary() {
+        let (w, h) = (160u32, 160u32);
+        let mut img = RgbaImage::new(w, h);
+        let mut scene = RgbaImage::new(w, h);
+        for y in 0..h {
+            for x in 0..w {
+                let in_hair = (45..115).contains(&x) && (25..135).contains(&y);
+                let rgb = if in_hair { [22, 24, 28, 255] } else { [20, 95, 110, 255] };
+                img.put_pixel(x, y, image::Rgba(rgb));
+                // Simulate a coarse, blurry neural probability ramp across x = 35..55
+                let ramp = ((x as f32 - 35.0) / 20.0).clamp(0.0, 1.0);
+                let right_ramp = ((125.0 - x as f32) / 20.0).clamp(0.0, 1.0);
+                let vert = if (20..140).contains(&y) { 1.0 } else { 0.0 };
+                let fg_p = (ramp.min(right_ramp) * vert * 255.0).round() as u8;
+                scene.put_pixel(x, y, image::Rgba([fg_p, fg_p, fg_p, 255]));
+            }
+        }
+        let mut params = RetouchParams::default();
+        params.bg_replace_mode = "pure_white".to_string();
+        params.stray_hair = 60.0;
+
+        let out = apply_retouch_pipeline_with_scene(&img, &params, None, Some(&scene));
+        // 3px outside the true RGB hair boundary (x = 42, where coarse neural ramp had leaked 0.35!)
+        let outside_px = out.get_pixel(42, 80);
+        assert!(
+            outside_px[0] >= 235 && outside_px[1] >= 235 && outside_px[2] >= 235,
+            "dark halo leaked outside hair boundary at (42,80): {:?}",
+            outside_px.0
+        );
+        // 4px inside true hair (x = 49) must remain dark hair
+        let inside_px = out.get_pixel(49, 80);
+        assert!(
+            inside_px[0] <= 60 && inside_px[1] <= 60 && inside_px[2] <= 60,
+            "hair edge was over-eroded at (49,80): {:?}",
+            inside_px.0
+        );
+    }
+
+    #[test]
+    fn background_replace_custom_color_and_original_masked_bokeh() {
+        let (img, scene, face) = make_portrait_cutout_fixture();
+        let mut custom = RetouchParams::default();
+        custom.face = face.clone();
+        custom.bg_replace_mode = "custom_color".to_string();
+        custom.bg_custom_color = "#1e40af".to_string();
+        let out_custom = apply_retouch_pipeline_with_scene(&img, &custom, None, Some(&scene));
+        let corner = out_custom.get_pixel(10, 10);
+        assert_eq!(corner.0, [30, 64, 175, 255]);
+
+        // Original mode bokeh with bright white background & pitch-black hair must not smudge black halo into white wall
+        let (w, h) = (160u32, 160u32);
+        let mut wall_img = RgbaImage::new(w, h);
+        let mut wall_scene = RgbaImage::new(w, h);
+        for y in 0..h {
+            for x in 0..w {
+                let in_sub = (50..110).contains(&x) && (30..140).contains(&y);
+                let rgb = if in_sub { [10, 10, 10, 255] } else { [245, 245, 245, 255] };
+                wall_img.put_pixel(x, y, image::Rgba(rgb));
+                let a = if in_sub { 255 } else { 0 };
+                wall_scene.put_pixel(x, y, image::Rgba([a, a, a, 255]));
+            }
+        }
+        let mut bokeh_p = RetouchParams::default();
+        bokeh_p.face = face;
+        bokeh_p.bg_blur_bokeh = 95.0;
+        let out_bokeh = apply_retouch_pipeline_with_scene(&wall_img, &bokeh_p, None, Some(&wall_scene));
+        let near_edge_bg = out_bokeh.get_pixel(46, 80);
+        assert!(
+            near_edge_bg[0] >= 225 && near_edge_bg[1] >= 225 && near_edge_bg[2] >= 225,
+            "black subject bled into original white background bokeh at (46,80): {:?}",
+            near_edge_bg.0
+        );
+    }
+
+    #[test]
+    fn crop_rect_and_custom_dimensions_export_exact_pixels() {
+        let (w, h) = (200u32, 300u32);
+        let mut img = RgbaImage::new(w, h);
+        for y in 0..h {
+            for x in 0..w {
+                let val = if x >= 40 && x < 140 && y >= 60 && y < 210 { 220u8 } else { 30u8 };
+                img.put_pixel(x, y, image::Rgba([val, val, val, 255]));
+            }
+        }
+
+        // 1. Explicit normalized interactive crop box
+        let mut p1 = RetouchParams::default();
+        p1.crop_x = 0.20; // x = 40
+        p1.crop_y = 0.20; // y = 60
+        p1.crop_w = 0.50; // w = 100
+        p1.crop_h = 0.50; // h = 150
+        let out1 = apply_crop_and_resize(img.clone(), &p1);
+        assert_eq!((out1.width(), out1.height()), (100, 150));
+        let inner = out1.to_rgba8().get_pixel(50, 75).0;
+        assert_eq!(inner[0], 220, "cropped box should contain bright interior");
+
+        // 2. Fallback aspect crop + custom pixel output size (ID photo 354x472)
+        let mut p2 = RetouchParams::default();
+        p2.crop_aspect_w = 3.0;
+        p2.crop_aspect_h = 4.0;
+        p2.crop_custom_w = 354.0;
+        p2.crop_custom_h = 472.0;
+        let out2 = apply_crop_and_resize(img, &p2);
+        assert_eq!((out2.width(), out2.height()), (354, 472));
+    }
+
+    #[test]
+    fn evoto_transparent_shadow_and_even_brightness() {
+        let (img, scene, face) = make_portrait_cutout_fixture();
+
+        // 1. Transparent PNG alpha cutout
+        let mut p_trans = RetouchParams::default();
+        p_trans.face = face.clone();
+        p_trans.bg_replace_mode = "transparent".to_string();
+        let out_trans = apply_retouch_pipeline_with_scene(&img, &p_trans, None, Some(&scene));
+        assert_eq!(out_trans.get_pixel(4, 4).0[3], 0, "corner must be transparent");
+        assert_eq!(out_trans.get_pixel(80, 90).0[3], 255, "subject center must be opaque");
+
+        // 2. Cast shadow on pure_white darkens right cast offset zone without darkening far top-left corner
+        let mut p_sh = RetouchParams::default();
+        p_sh.face = face.clone();
+        p_sh.bg_replace_mode = "pure_white".to_string();
+        p_sh.bg_shadow_type = "cast_shadow".to_string();
+        p_sh.bg_shadow_opacity = 75.0;
+        p_sh.bg_shadow_blur = 20.0;
+        let out_sh = apply_retouch_pipeline_with_scene(&img, &p_sh, None, Some(&scene));
+        let top_left = out_sh.get_pixel(4, 4).0;
+        assert!(top_left[0] >= 250 && top_left[1] >= 250 && top_left[2] >= 250);
+        // Check right side of torso inside cast shadow zone (right of in_shirt x=125 -> x=129, y=130)
+        let mut p_no_sh = RetouchParams::default();
+        p_no_sh.face = face.clone();
+        p_no_sh.bg_replace_mode = "pure_white".to_string();
+        let out_no_sh = apply_retouch_pipeline_with_scene(&img, &p_no_sh, None, Some(&scene));
+        assert!(
+            out_sh.get_pixel(129, 130).0[0] + 15 < out_no_sh.get_pixel(129, 130).0[0],
+            "cast_shadow should darken cast zone near subject right edge"
+        );
+
+        // 3. Even brightness reduces vignette/uneven backdrop falloff in corners
+        let (w, h) = (160u32, 160u32);
+        let mut uneven = RgbaImage::new(w, h);
+        let mut u_scene = RgbaImage::new(w, h);
+        for y in 0..h {
+            for x in 0..w {
+                let in_sub = (55..105).contains(&x) && (30..135).contains(&y);
+                let luma = if in_sub {
+                    120u8
+                } else {
+                    (110.0 + (x as f32 / w as f32) * 120.0).round() as u8
+                };
+                uneven.put_pixel(x, y, image::Rgba([luma, luma, luma, 255]));
+                let a = if in_sub { 255 } else { 0 };
+                u_scene.put_pixel(x, y, image::Rgba([a, a, a, 255]));
+            }
+        }
+        let mut p_even = RetouchParams::default();
+        p_even.face = face;
+        p_even.bg_even_brightness = true;
+        let out_even = apply_retouch_pipeline_with_scene(&uneven, &p_even, None, Some(&u_scene));
+        let orig_gap = (uneven.get_pixel(150, 20).0[0] as i32 - uneven.get_pixel(10, 20).0[0] as i32).abs();
+        let even_gap = (out_even.get_pixel(150, 20).0[0] as i32 - out_even.get_pixel(10, 20).0[0] as i32).abs();
+        assert!(even_gap < orig_gap / 2, "bg_even_brightness should flatten background gradient: orig={orig_gap}, even={even_gap}");
+    }
+
+    #[test]
+    fn evoto_clothing_retouch_controls() {
+        let (mut img, scene, face) = make_portrait_cutout_fixture();
+        // Inject realistic shirt defects inside in_shirt (x: 45..115, y: 100..175):
+        // 1) Wrinkle stripes + sweat damp patch in left-center + lint speck + rainbow moiré wave
+        for y in 98..178 {
+            for x in 42..118 {
+                let mut r = 72.0f32;
+                let mut g = 104.0f32;
+                let mut b = 152.0f32;
+                // Broad + fine vertical/diagonal wrinkle oscillation
+                let large_fold = ((x as f32 * 0.18).sin() * 24.0).round();
+                let small_crease = ((y as f32 * 0.55).sin() * 14.0).round();
+                r += large_fold + small_crease;
+                g += large_fold + small_crease;
+                b += large_fold + small_crease;
+                // Damp sweat patch around (62, 128)
+                let dx = x as f32 - 62.0;
+                let dy = y as f32 - 128.0;
+                let dist = (dx * dx + dy * dy).sqrt();
+                if dist < 14.0 {
+                    let dip = (1.0 - dist / 14.0) * 44.0;
+                    r -= dip;
+                    g -= dip;
+                    b -= dip;
+                }
+                // Rainbow moiré bands in right chest (85..112, 110..150)
+                if (85..112).contains(&x) && (110..150).contains(&y) {
+                    let wave = ((x + y) as f32 * 1.35).sin();
+                    r += wave * 34.0;
+                    g -= wave * 28.0;
+                    b += ((x as f32 * 1.2).cos()) * 26.0;
+                }
+                // White lint speck
+                if (x == 96 && y == 162) || (x == 97 && y == 162) {
+                    r = 248.0;
+                    g = 248.0;
+                    b = 248.0;
+                }
+                img.put_pixel(
+                    x,
+                    y,
+                    image::Rgba([
+                        r.clamp(0.0, 255.0) as u8,
+                        g.clamp(0.0, 255.0) as u8,
+                        b.clamp(0.0, 255.0) as u8,
+                        255,
+                    ]),
+                );
+            }
+        }
+
+        // 1) Wrinkle smoothing reduces crease contrast + Small/Large knobs differentiate
+        let mut p_wrinkle = RetouchParams::default();
+        p_wrinkle.face = face.clone();
+        p_wrinkle.clothing_dewrinkle = 85.0;
+        let out_wr = apply_retouch_pipeline_with_scene(&img, &p_wrinkle, None, Some(&scene));
+
+        let mut p_no_large = p_wrinkle.clone();
+        p_no_large.clothing_large_wrinkles = 10.0;
+        let out_nl = apply_retouch_pipeline_with_scene(&img, &p_no_large, None, Some(&scene));
+        assert_ne!(out_wr, out_nl, "clothing_large_wrinkles must control broad drape smoothing");
+
+        let mut p_no_small = p_wrinkle.clone();
+        p_no_small.clothing_small_wrinkles = 10.0;
+        let out_ns = apply_retouch_pipeline_with_scene(&img, &p_no_small, None, Some(&scene));
+        assert_ne!(out_wr, out_ns, "clothing_small_wrinkles must control fine wrinkle smoothing");
+
+        // 2) Sweat stain removal lifts dark damp patch at (62, 128)
+        let mut p_sweat = RetouchParams::default();
+        p_sweat.face = face.clone();
+        p_sweat.clothing_sweat_stain = 90.0;
+        let out_sw = apply_retouch_pipeline_with_scene(&img, &p_sweat, None, Some(&scene));
+        assert!(
+            out_sw.get_pixel(62, 128).0[0] > img.get_pixel(62, 128).0[0] + 6,
+            "clothing_sweat_stain should lift damp patch: orig={} after={}",
+            img.get_pixel(62, 128).0[0],
+            out_sw.get_pixel(62, 128).0[0]
+        );
+
+        // 3) Moiré removal reduces rainbow chromatic oscillation in (85..112, 110..150)
+        let mut p_moire = RetouchParams::default();
+        p_moire.face = face.clone();
+        p_moire.clothing_moire_remove = 90.0;
+        let out_mo = apply_retouch_pipeline_with_scene(&img, &p_moire, None, Some(&scene));
+        let orig_chroma_dev: i32 = (88..108)
+            .map(|x| {
+                let p = img.get_pixel(x, 125).0;
+                (p[0] as i32 - p[1] as i32).abs()
+            })
+            .sum();
+        let after_chroma_dev: i32 = (88..108)
+            .map(|x| {
+                let p = out_mo.get_pixel(x, 125).0;
+                (p[0] as i32 - p[1] as i32).abs()
+            })
+            .sum();
+        assert!(
+            after_chroma_dev < orig_chroma_dev,
+            "clothing_moire_remove should dampen chromatic moire oscillation: {orig_chroma_dev} -> {after_chroma_dev}"
+        );
+
+        // 4) Edge smooth alters boundary pixels around shirt edge (x=35, y=130)
+        let mut p_edge = RetouchParams::default();
+        p_edge.face = face;
+        p_edge.clothing_edge_smooth = 85.0;
+        let out_ed = apply_retouch_pipeline_with_scene(&img, &p_edge, None, Some(&scene));
+        assert_ne!(out_ed.as_raw(), img.as_raw(), "clothing_edge_smooth should alter garment boundary");
+    }
+
+    #[test]
+    fn hair_cutout_punches_wall_pockets_and_eliminates_halo() {
+        let (w, h) = (220u32, 220u32);
+        let mut img = RgbaImage::new(w, h);
+        let mut mask = RgbaImage::new(w, h);
+        let mut scene = RgbaImage::new(w, h);
+
+        for y in 0..h {
+            for x in 0..w {
+                let in_cheek = (80..120).contains(&x) && (70..135).contains(&y);
+                let in_lock = (58..70).contains(&x) && (65..140).contains(&y);
+                let in_crown = (65..135).contains(&x) && (40..70).contains(&y);
+                let in_pocket = (70..80).contains(&x) && (75..125).contains(&y);
+                let in_strand = (53..=54).contains(&x) && (80..115).contains(&y);
+
+                let rgb = if in_cheek {
+                    [214, 174, 148, 255]
+                } else if in_lock || in_crown {
+                    [18, 16, 16, 255]
+                } else if in_strand {
+                    [36, 32, 32, 255]
+                } else {
+                    [205, 198, 182, 255]
+                };
+                img.put_pixel(x, y, image::Rgba(rgb));
+
+                let in_crown_halo = (65..135).contains(&x) && (34..40).contains(&y);
+                let in_outer_halo = (46..58).contains(&x) && (65..135).contains(&y);
+
+                let skin_u8 = if in_cheek { 255 } else { 0 };
+                let hair_u8 = if in_lock || in_crown {
+                    240
+                } else if in_pocket || in_strand || in_outer_halo || in_crown_halo {
+                    140
+                } else {
+                    0
+                };
+                mask.put_pixel(x, y, image::Rgba([skin_u8, 0, hair_u8, 255]));
+
+                let fg_u8 = if in_cheek || in_lock || in_crown {
+                    255
+                } else if in_pocket || in_outer_halo || in_crown_halo {
+                    112 // coarse blurred neural fgProb (~0.44) leaking into trapped wall pocket & halo
+                } else {
+                    0
+                };
+                let solid_u8 = if in_cheek { 255 } else { 0 };
+                scene.put_pixel(x, y, image::Rgba([fg_u8, 0, solid_u8, 255]));
+            }
+        }
+
+        let mut params = RetouchParams::default();
+        params.bg_replace_mode = "pure_white".to_string();
+        params.bg_edge_mode = "auto".to_string();
+        params.bg_decontam = true;
+        params.face = FaceRegion {
+            center_x: 0.48,
+            center_y: 0.46,
+            face_rx: 0.14,
+            face_ry: 0.16,
+            forehead_x: 0.48,
+            forehead_y: 0.34,
+            chin_x: 0.48,
+            chin_y: 0.61,
+            left_eye_x: 0.43,
+            left_eye_y: 0.43,
+            right_eye_x: 0.53,
+            right_eye_y: 0.43,
+            nose_x: 0.48,
+            nose_y: 0.49,
+            mouth_x: 0.48,
+            mouth_y: 0.55,
+            mouth_left_x: 0.44,
+            mouth_left_y: 0.55,
+            mouth_right_x: 0.52,
+            mouth_right_y: 0.55,
+            cheek_left_x: 0.39,
+            cheek_left_y: 0.48,
+            cheek_right_x: 0.57,
+            cheek_right_y: 0.48,
+            jaw_left_x: 0.40,
+            jaw_left_y: 0.57,
+            jaw_right_x: 0.56,
+            jaw_right_y: 0.57,
+        };
+
+        let out = apply_retouch_pipeline_with_scene(&img, &params, Some(&mask), Some(&scene));
+
+        // 1) Enclosed beige wall pocket between hair lock and cheek must punch cleanly to pure white
+        let pocket_px = out.get_pixel(75, 100).0;
+        assert!(
+            pocket_px[0] >= 245 && pocket_px[1] >= 245 && pocket_px[2] >= 245,
+            "enclosed wall pocket remained muddy instead of pure white: {:?}",
+            pocket_px
+        );
+
+        // 2) Coarse neural halo outside crown and outer temple must punch cleanly to pure white
+        for &(hx, hy) in &[(100u32, 36u32), (48u32, 95u32)] {
+            let halo_px = out.get_pixel(hx, hy).0;
+            assert!(
+                halo_px[0] >= 245 && halo_px[1] >= 245 && halo_px[2] >= 245,
+                "outer grey/dark halo leaked at ({hx},{hy}): {:?}",
+                halo_px
+            );
+        }
+
+        // 3) Hair lock interior and fine outer flyaway strand must stay crisp dark hair
+        let lock_px = out.get_pixel(64, 100).0;
+        assert!(
+            lock_px[0] <= 45 && lock_px[1] <= 45 && lock_px[2] <= 45,
+            "hair lock was over-eroded: {:?}",
+            lock_px
+        );
+        let strand_px = out.get_pixel(54, 98).0;
+        assert!(
+            strand_px[0] <= 120 && strand_px[1] <= 120 && strand_px[2] <= 120,
+            "outer flyaway strand was erased: {:?}",
+            strand_px
+        );
+
+        // 4) Cheek skin remains intact
+        let cheek_px = out.get_pixel(95, 100).0;
+        assert!(
+            (cheek_px[0] as i32 - 214).abs() <= 15
+                && (cheek_px[1] as i32 - 174).abs() <= 15
+                && (cheek_px[2] as i32 - 148).abs() <= 15,
+            "cheek skin was corrupted: {:?}",
+            cheek_px
+        );
+    }
+
+    #[test]
+    fn folded_arms_rescue_tucked_fingers_and_keep_crisp_elbows() {
+        let (w, h) = (220u32, 240u32);
+        let mut img = RgbaImage::new(w, h);
+        let mut scene = RgbaImage::new(w, h);
+
+        for y in 0..h {
+            for x in 0..w {
+                let in_head = (88..132).contains(&x) && (22..68).contains(&y);
+                let in_shirt = (52..168).contains(&x) && (72..220).contains(&y);
+                let in_arm = (36..184).contains(&x) && (122..182).contains(&y);
+                // Tucked pale fingers peeking inside sleeve fold on left torso:
+                let in_fingers = (68..82).contains(&x) && (116..138).contains(&y);
+                // Soft grey wall shadow extending 4px outside brown elbows
+                let in_elbow_ramp = ((28..36).contains(&x) || (184..192).contains(&x)) && (126..178).contains(&y);
+
+                let rgb = if in_head {
+                    [196, 152, 130, 255]
+                } else if in_fingers {
+                    [224, 198, 186, 255]
+                } else if in_arm {
+                    [148, 106, 84, 255]
+                } else if in_shirt {
+                    [172, 202, 226, 255]
+                } else if in_elbow_ramp {
+                    [194, 194, 192, 255]
+                } else {
+                    [202, 202, 200, 255]
+                };
+                img.put_pixel(x, y, image::Rgba(rgb));
+
+                let fg_u8 = if in_fingers {
+                    52 // simulated neural misclassification inside enclosed sleeve crease (~0.20)
+                } else if in_head || in_arm || in_shirt {
+                    255
+                } else if in_elbow_ramp {
+                    118 // blurry coarse elbow probability ramp (~0.46)
+                } else {
+                    0
+                };
+                let cloth_u8 = if in_shirt && !in_arm && !in_fingers { 255 } else { 0 };
+                let solid_u8 = if in_fingers { 52 } else { fg_u8 };
+                scene.put_pixel(x, y, image::Rgba([fg_u8, cloth_u8, solid_u8, 255]));
+            }
+        }
+
+        let mut params = RetouchParams::default();
+        params.bg_replace_mode = "pure_white".to_string();
+        params.bg_edge_mode = "auto".to_string();
+        params.bg_decontam = true;
+        params.face = FaceRegion {
+            center_x: 0.50,
+            center_y: 0.19,
+            face_rx: 0.10,
+            face_ry: 0.10,
+            forehead_x: 0.50,
+            forehead_y: 0.12,
+            chin_x: 0.50,
+            chin_y: 0.28,
+            left_eye_x: 0.46,
+            left_eye_y: 0.17,
+            right_eye_x: 0.54,
+            right_eye_y: 0.17,
+            nose_x: 0.50,
+            nose_y: 0.21,
+            mouth_x: 0.50,
+            mouth_y: 0.24,
+            mouth_left_x: 0.47,
+            mouth_left_y: 0.24,
+            mouth_right_x: 0.53,
+            mouth_right_y: 0.24,
+            cheek_left_x: 0.42,
+            cheek_left_y: 0.20,
+            cheek_right_x: 0.58,
+            cheek_right_y: 0.20,
+            jaw_left_x: 0.43,
+            jaw_left_y: 0.26,
+            jaw_right_x: 0.57,
+            jaw_right_y: 0.26,
+        };
+
+        let out = apply_retouch_pipeline_with_scene(&img, &params, None, Some(&scene));
+
+        // 1) Tucked fingers inside folded arm must be rescued, NOT punched white
+        let finger_px = out.get_pixel(75, 127).0;
+        assert!(
+            (finger_px[0] as i32 - 224).abs() <= 16
+                && (finger_px[1] as i32 - 198).abs() <= 16
+                && (finger_px[2] as i32 - 186).abs() <= 16,
+            "tucked fingers inside folded arms were punched out: {:?}",
+            finger_px
+        );
+
+        // 2) Blurry halo 3px outside brown elbows must clear cleanly to pure white
+        for &(ex, ey) in &[(32u32, 150u32), (188u32, 150u32)] {
+            let halo_px = out.get_pixel(ex, ey).0;
+            assert!(
+                halo_px[0] >= 245 && halo_px[1] >= 245 && halo_px[2] >= 245,
+                "elbow halo leaked at ({ex},{ey}): {:?}",
+                halo_px
+            );
+        }
+
+        // 3) Crisp warm brown elbow interior stays saturated & intact (no grey desaturation ring)
+        let elbow_px = out.get_pixel(39, 150).0;
+        assert!(
+            elbow_px[0] > elbow_px[2] + 30 && (elbow_px[0] as i32 - 148).abs() <= 15,
+            "brown elbow skin edge was desaturated/corrupted: {:?}",
+            elbow_px
+        );
+    }
+
+    #[test]
+    fn arm_waist_enclosed_wall_triangle_punches_cleanly_transparent() {
+        let w = 180u32;
+        let h = 220u32;
+        let mut img = image::RgbaImage::new(w, h);
+        let mut sem_mask = image::RgbaImage::new(w, h);
+        let mut scene_mask = image::RgbaImage::new(w, h);
+
+        for y in 0..h {
+            let ny = y as f32 / (h - 1) as f32;
+            // Studio backdrop with natural top-to-bottom illumination falloff
+            let wall_r = (220.0 - ny * 28.0).round() as u8;
+            let wall_g = (214.0 - ny * 28.0).round() as u8;
+            let wall_b = (202.0 - ny * 28.0).round() as u8;
+
+            for x in 0..w {
+                let is_head = ((x as f32 - 90.0) / 18.0).powi(2) + ((y as f32 - 52.0) / 22.0).powi(2) <= 1.0;
+                let is_shirt = x >= 54 && x <= 126 && y >= 82;
+                let is_upper_arm = x >= 22 && x <= 38 && y >= 92 && y <= 168;
+                let is_forearm = x >= 24 && x <= 68 && y >= 152 && y <= 174;
+                let is_enclosed_gap = x >= 39 && x <= 53 && y >= 112 && y <= 151;
+
+                let (px, fg_u8, cloth_u8, skin_u8) = if is_head {
+                    ([186, 146, 126, 255], 255u8, 0u8, 255u8)
+                } else if is_shirt {
+                    ([140, 175, 205, 255], 255u8, 255u8, 0u8)
+                } else if is_upper_arm || is_forearm {
+                    ([150, 110, 88, 255], 255u8, 0u8, 255u8)
+                } else if is_enclosed_gap {
+                    // Enclosed arm-waist triangle with subtle cast shadow of the same cream wall chromaticity
+                    let sr = (wall_r as f32 * 0.90).round() as u8;
+                    let sg = (wall_g as f32 * 0.90).round() as u8;
+                    let sb = (wall_b as f32 * 0.90).round() as u8;
+                    ([sr, sg, sb, 255], 0u8, 0u8, 0u8)
+                } else {
+                    ([wall_r, wall_g, wall_b, 255], 0u8, 0u8, 0u8)
+                };
+
+                img.put_pixel(x, y, image::Rgba(px));
+                sem_mask.put_pixel(x, y, image::Rgba([skin_u8, 0, 0, 255]));
+                scene_mask.put_pixel(x, y, image::Rgba([fg_u8, cloth_u8, fg_u8, 255]));
+            }
+        }
+
+        let mut params = RetouchParams::default();
+        params.bg_replace_mode = "transparent".to_string();
+        params.bg_edge_mode = "auto".to_string();
+        params.bg_decontam = true;
+        params.face.center_x = 0.50;
+        params.face.center_y = 52.0 / 220.0;
+        params.face.face_ry = 22.0 / 220.0;
+        params.face.chin_y = 74.0 / 220.0;
+
+        let out = apply_retouch_pipeline_with_scene(&img, &params, Some(&sem_mask), Some(&scene_mask));
+
+        // 1) Enclosed arm-waist cream studio wall gap must punch cleanly transparent (not filled solid!)
+        for &(gx, gy) in &[(45, 128), (46, 136), (48, 142)] {
+            let p = out.get_pixel(gx, gy).0;
+            assert!(
+                p[3] <= 15,
+                "enclosed arm-waist wall triangle ({}, {}) should stay transparent, got {:?}",
+                gx,
+                gy,
+                p
+            );
+        }
+
+        // 2) Surrounding bent arm and blue shirt must stay opaque and uncorrupted
+        let arm_px = out.get_pixel(30, 140).0;
+        assert!(arm_px[3] >= 240, "arm should remain opaque, got {:?}", arm_px);
+        let shirt_px = out.get_pixel(90, 140).0;
+        assert!(shirt_px[3] >= 240, "shirt should remain opaque, got {:?}", shirt_px);
+    }
+
+    #[test]
+    fn arm_waist_blurred_coarse_neural_pocket_still_punches_transparent() {
+        let w = 180u32;
+        let h = 220u32;
+        let mut img = image::RgbaImage::new(w, h);
+        let mut sem_mask = image::RgbaImage::new(w, h);
+        let mut scene_mask = image::RgbaImage::new(w, h);
+
+        for y in 0..h {
+            let ny = y as f32 / (h - 1) as f32;
+            let wall_r = (218.0 - ny * 22.0).round() as u8;
+            let wall_g = (212.0 - ny * 22.0).round() as u8;
+            let wall_b = (200.0 - ny * 22.0).round() as u8;
+
+            for x in 0..w {
+                let is_head = ((x as f32 - 90.0) / 18.0).powi(2) + ((y as f32 - 52.0) / 22.0).powi(2) <= 1.0;
+                let is_shirt = x >= 56 && x <= 126 && y >= 82;
+                let is_upper_arm = x >= 22 && x <= 38 && y >= 92 && y <= 168;
+                let is_forearm = x >= 24 && x <= 70 && y >= 152 && y <= 174;
+                let is_enclosed_gap = x >= 39 && x <= 55 && y >= 110 && y <= 151;
+
+                let (px, fg_u8, cloth_u8, skin_u8) = if is_head {
+                    ([186, 146, 126, 255], 255u8, 0u8, 255u8)
+                } else if is_shirt {
+                    ([140, 175, 205, 255], 255u8, 255u8, 0u8)
+                } else if is_upper_arm || is_forearm {
+                    ([150, 110, 88, 255], 255u8, 0u8, 255u8)
+                } else if is_enclosed_gap {
+                    // Simulate coarse 256x256 segmentation blurring high foreground probability (~0.72)
+                    // across the enclosed wall triangle between sleeve/arm and shirt
+                    ([wall_r.saturating_sub(10), wall_g.saturating_sub(10), wall_b.saturating_sub(10), 255], 185u8, 0u8, 0u8)
+                } else {
+                    ([wall_r, wall_g, wall_b, 255], 0u8, 0u8, 0u8)
+                };
+
+                img.put_pixel(x, y, image::Rgba(px));
+                sem_mask.put_pixel(x, y, image::Rgba([skin_u8, 0, 0, 255]));
+                scene_mask.put_pixel(x, y, image::Rgba([fg_u8, cloth_u8, fg_u8, 255]));
+            }
+        }
+
+        let mut params = RetouchParams::default();
+        params.bg_replace_mode = "transparent".to_string();
+        params.bg_edge_mode = "auto".to_string();
+        params.bg_decontam = true;
+        params.face.center_x = 0.50;
+        params.face.center_y = 52.0 / 220.0;
+        params.face.face_ry = 22.0 / 220.0;
+        params.face.chin_y = 74.0 / 220.0;
+
+        let out = apply_retouch_pipeline_with_scene(&img, &params, Some(&sem_mask), Some(&scene_mask));
+
+        for &(gx, gy) in &[(46, 128), (47, 134), (48, 140)] {
+            let p = out.get_pixel(gx, gy).0;
+            assert!(
+                p[3] <= 20,
+                "coarse blurred fg>=0.72 enclosed arm-waist pocket ({}, {}) remained opaque: {:?}",
+                gx,
+                gy,
+                p
+            );
+        }
+
+        let shirt_px = out.get_pixel(90, 140).0;
+        assert!(shirt_px[3] >= 240, "shirt should remain opaque, got {:?}", shirt_px);
+    }
+
+    #[test]
+    fn semantic_grid_distinguishes_grayscale_rmbg_matte_and_rgb_scene_clothing() {
+        let mut face = FaceRegion::default();
+        face.center_x = 0.5;
+        face.center_y = 0.25;
+        face.face_rx = 0.14;
+        face.face_ry = 0.16;
+        face.chin_y = 0.40;
+
+        // 1) MediaPipe RGB scene mask: face skin has R=255,G=0,B=255 while far edge shirt has R=255,G=255,B=255.
+        // Whole-image check must NOT mistake R=G=B=255 shirt pixels for single-channel matte!
+        let mut rgb_scene = image::RgbaImage::new(64, 64);
+        for y in 0..64 {
+            for x in 0..64 {
+                if y < 24 && x >= 20 && x <= 44 {
+                    rgb_scene.put_pixel(x, y, image::Rgba([255, 0, 255, 255]));
+                } else {
+                    // Clothing even at outer edge (x=2, y=50) outside torso ellipse
+                    rgb_scene.put_pixel(x, y, image::Rgba([255, 255, 255, 255]));
+                }
+            }
+        }
+        let sem_rgb = build_semantic_grid(None, Some(&rgb_scene), &face);
+        let edge_idx = 50usize * MASK_DIM * 8 + 16; // nx ~ 0.03, ny ~ 0.78 -> far outside geo.clothing ellipse
+        assert!(
+            sem_rgb.weights[edge_idx].clothing > 0.95,
+            "RGB scene mask clothing channel was clobbered by per-pixel single-matte check: {}",
+            sem_rgb.weights[edge_idx].clothing
+        );
+
+        // 2) Pure RMBG-1.4 grayscale matte (R==G==B everywhere) activates single-matte mode cleanly
+        let mut gray_matte = image::RgbaImage::new(64, 64);
+        for y in 0..64 {
+            for x in 0..64 {
+                let v = if x >= 16 && x <= 48 && y >= 8 { 230u8 } else { 0u8 };
+                gray_matte.put_pixel(x, y, image::Rgba([v, v, v, 255]));
+            }
+        }
+        let sem_gray = build_semantic_grid(None, Some(&gray_matte), &face);
+        let center_idx = (MASK_DIM / 2) * MASK_DIM + (MASK_DIM / 2);
+        let corner_idx = 0;
+        assert!(sem_gray.raw_fg[center_idx] > 0.85, "grayscale matte center fg missing: {}", sem_gray.raw_fg[center_idx]);
+        assert!(sem_gray.raw_fg[corner_idx] < 0.05, "grayscale matte corner fg not clear: {}", sem_gray.raw_fg[corner_idx]);
+    }
+
+    #[test]
+    fn highres_matte_preserves_fine_hair_and_clean_arm_curve() {
+        let (w, h) = (160u32, 200u32);
+        let mut img = RgbaImage::new(w, h);
+        let mut matte = RgbaImage::new(w, h);
+
+        for y in 0..h {
+            for x in 0..w {
+                let is_arm = x >= 25 && x <= 48 && y >= 100 && y <= 185;
+                let is_torso = x >= 68 && x <= 125 && y >= 80 && y <= 195;
+                let is_hair_strand = x == 55 && y >= 30 && y <= 70;
+                // Semi-transparent strand (alpha ~ 0.28 = 71) over bright wall
+                let rgb = if is_arm {
+                    [160, 120, 96, 255]
+                } else if is_torso {
+                    [130, 175, 220, 255]
+                } else if is_hair_strand {
+                    [50, 48, 46, 255]
+                } else {
+                    [225, 222, 214, 255]
+                };
+                img.put_pixel(x, y, image::Rgba(rgb));
+
+                let alpha = if is_arm || is_torso {
+                    255u8
+                } else if is_hair_strand {
+                    72u8 // 0.282 alpha - must NOT be crushed to 0 by solid_lo=0.44!
+                } else {
+                    0u8
+                };
+                matte.put_pixel(x, y, image::Rgba([alpha, alpha, alpha, 255]));
+            }
+        }
+
+        let mut params = RetouchParams::default();
+        params.bg_replace_mode = "transparent".to_string();
+        params.is_highres_matte = true;
+        params.bg_decontam = false;
+
+        let out = apply_retouch_pipeline_with_scene(&img, &params, None, Some(&matte));
+
+        // Fine hair strand keeps exact neural alpha ~72 without getting truncated
+        let strand_a = out.get_pixel(55, 50).0[3];
+        assert!(
+            (strand_a as i32 - 72).abs() <= 4,
+            "fine hair strand alpha was crushed or smeared: {strand_a}"
+        );
+
+        // Enclosed arm-torso wall gap stays 0 alpha cleanly
+        let gap_a = out.get_pixel(58, 140).0[3];
+        assert_eq!(gap_a, 0, "arm-torso gap leaked background pixel: {gap_a}");
+
+        // Arm inner boundary at x=48 remains sharp and opaque without 128x128 pocket-punching bite marks
+        let arm_edge_a = out.get_pixel(48, 140).0[3];
+        assert_eq!(arm_edge_a, 255, "arm edge was bitten by pocket puncher: {arm_edge_a}");
     }
 }

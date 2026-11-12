@@ -4,3 +4,4 @@ public/models/wasm/*.js linguist-vendored
 dist/** linguist-generated
 package-lock.json linguist-generated
 src-tauri/gen/** linguist-generated
+models/RMBG-1.4-model.onnx filter=lfs diff=lfs merge=lfs -text

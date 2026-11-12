@@ -74,8 +74,8 @@ async function ensureAiModelsLoaded() {
           delegate: 'CPU',
         },
         runningMode: 'IMAGE',
-        outputCategoryMask: true,
-        outputConfidenceMasks: false,
+        outputCategoryMask: false,
+        outputConfidenceMasks: true,
       });
     } catch (e) {
       console.error('ImageSegmenter init error:', e);
@@ -122,6 +122,27 @@ function fillLandmarkPolygon(ctx, pts, indices, w, h, fillStyle, blurPx = 0, exp
   ctx.closePath();
   ctx.fill();
   ctx.restore();
+}
+
+function sampleConfidenceBilinear(plane, w, h, nx, ny) {
+  const fx = Math.max(0, Math.min(w - 1, nx * (w - 1)));
+  const fy = Math.max(0, Math.min(h - 1, ny * (h - 1)));
+  const x0 = Math.floor(fx);
+  const y0 = Math.floor(fy);
+  const x1 = Math.min(w - 1, x0 + 1);
+  const y1 = Math.min(h - 1, y0 + 1);
+  const dx = fx - x0;
+  const dy = fy - y0;
+  const i00 = y0 * w + x0;
+  const i10 = y0 * w + x1;
+  const i01 = y1 * w + x0;
+  const i11 = y1 * w + x1;
+  return (
+    plane[i00] * (1 - dx) * (1 - dy) +
+    plane[i10] * dx * (1 - dy) +
+    plane[i01] * (1 - dx) * dy +
+    plane[i11] * dx * dy
+  );
 }
 
 /**
@@ -266,20 +287,29 @@ export async function analyzePhotoWithNeuralAI(imgElement, fallbackFace) {
   }
 
   // 2. Run 6-Class Semantic Portrait Segmenter (0=BG, 1=Hair, 2=BodySkin, 3=FaceSkin, 4=Clothes, 5=Accessories)
+  let segConfs = null;
   let segClasses = null;
   let segW = 0;
   let segH = 0;
   if (portraitSegmenter) {
+    let segRes = null;
     try {
-      const segRes = portraitSegmenter.segment(workCanvas);
-      if (segRes?.categoryMask) {
+      segRes = portraitSegmenter.segment(workCanvas);
+      if (segRes?.confidenceMasks && segRes.confidenceMasks.length >= 5) {
+        segW = segRes.confidenceMasks[0].width;
+        segH = segRes.confidenceMasks[0].height;
+        segConfs = segRes.confidenceMasks.map((mask) => new Float32Array(mask.getAsFloat32Array()));
+      } else if (segRes?.categoryMask) {
         segW = segRes.categoryMask.width;
         segH = segRes.categoryMask.height;
         segClasses = new Uint8Array(segRes.categoryMask.getAsUint8Array());
-        segRes.categoryMask.close();
       }
     } catch (e) {
       console.warn('PortraitSegmenter error:', e);
+    } finally {
+      try {
+        segRes?.close?.();
+      } catch (_) {}
     }
   }
 
@@ -439,7 +469,10 @@ export async function analyzePhotoWithNeuralAI(imgElement, fallbackFace) {
   const skinPixels = sCtx.getImageData(0, 0, maskSize, maskSize).data;
   const featPixels = fCtx.getImageData(0, 0, maskSize, maskSize).data;
 
-  // Combine 478-Point Polygon Masks + 6-Class Neural Segmentation into a single 512x512 RGBA PNG for Rust
+  // Combine 478-Point Polygon Masks + Continuous 6-Class Neural Segmentation into lossless A=255 PNGs
+  // Canvas 1 (maskBase64): R=Skin, G=Discrete Feature ID, B=Hair, A=255 (no premultiplication loss!)
+  // Canvas 2 (sceneMaskBase64): R=Continuous Subject Matte, G=Clothing, B=Solid Subject Core, A=255
+  const hasNeuralSeg = Boolean(segConfs || segClasses);
   const combinedCanvas = document.createElement('canvas');
   combinedCanvas.width = maskSize;
   combinedCanvas.height = maskSize;
@@ -447,77 +480,124 @@ export async function analyzePhotoWithNeuralAI(imgElement, fallbackFace) {
   const outImg = cCtx.createImageData(maskSize, maskSize);
   const outData = outImg.data;
 
+  const sceneCanvas = hasNeuralSeg ? document.createElement('canvas') : null;
+  let scCtx = null;
+  let sceneImg = null;
+  let sceneData = null;
+  if (sceneCanvas) {
+    sceneCanvas.width = maskSize;
+    sceneCanvas.height = maskSize;
+    scCtx = sceneCanvas.getContext('2d');
+    sceneImg = scCtx.createImageData(maskSize, maskSize);
+    sceneData = sceneImg.data;
+  }
+
   for (let y = 0; y < maskSize; y++) {
-    const ny = y / maskSize;
+    const ny = y / (maskSize - 1);
     const sy = segClasses ? Math.min(segH - 1, Math.floor(ny * segH)) : 0;
     for (let x = 0; x < maskSize; x++) {
-      const nx = x / maskSize;
+      const nx = x / (maskSize - 1);
       const idx = (y * maskSize + x) * 4;
-      const polySkin = skinPixels[idx]; // 0..255 from 478-point face oval (eyes/brows/nostrils/lips = 0)
-      const featCode = featPixels[idx]; // 0, 30, 60, 85, 110, 125, 135, 160, 205, 245
+      const polySkin = skinPixels[idx];
+      const featCode = featPixels[idx];
 
-      let segClass = 255;
-      if (segClasses) {
-        const sx = Math.min(segW - 1, Math.floor(nx * segW));
-        segClass = segClasses[sy * segW + sx];
-      }
-
-      // R: Skin Mask (combine polygon face skin + segmenter class 2 BodySkin, while keeping Eyes/Brows/Nostrils/Lips strictly 0!)
       let skinVal = polySkin;
-      if (segClasses) {
-        if (segClass === 2) {
-          // Body/Neck Skin (below chin or outside face oval)
-          if (ny > face.mouthY) {
-            skinVal = Math.max(skinVal, 215);
-          }
+      let hairVal = 0;
+      let fgProb = 0;
+      let clothProb = 0;
+      let solidProb = 0;
+
+      if (segConfs) {
+        const bgProb = sampleConfidenceBilinear(segConfs[0], segW, segH, nx, ny);
+        const hairProb = sampleConfidenceBilinear(segConfs[1], segW, segH, nx, ny);
+        const bodyProb = sampleConfidenceBilinear(segConfs[2], segW, segH, nx, ny);
+        const faceProb = sampleConfidenceBilinear(segConfs[3], segW, segH, nx, ny);
+        clothProb = sampleConfidenceBilinear(segConfs[4], segW, segH, nx, ny);
+        const accProb = segConfs[5] ? sampleConfidenceBilinear(segConfs[5], segW, segH, nx, ny) : 0;
+
+        const personSum = Math.min(1, hairProb + bodyProb + faceProb + clothProb + accProb);
+        fgProb = Math.max(0, Math.min(1, 0.5 * (1 - bgProb) + 0.5 * personSum));
+        solidProb = Math.max(0, Math.min(1, bodyProb + faceProb + clothProb + accProb));
+        // Boost solidProb from fgProb ONLY for non-hair body/arm/hand regions so split
+        // body/cloth softmax confidences keep solid torso/arms intact without masking hair gaps.
+        if (fgProb > 0.55 && hairProb < 0.25 && solidProb < fgProb * 0.80) {
+          solidProb = Math.max(solidProb, fgProb * 0.72);
+        }
+        hairVal = Math.round(Math.max(0, Math.min(1, hairProb)) * 255);
+
+        if (bodyProb > 0.25 && ny > face.mouthY) {
+          skinVal = Math.max(skinVal, Math.round(Math.min(1, bodyProb) * 235));
+        }
+        if (!pts && faceProb > 0.25) {
+          skinVal = Math.max(skinVal, Math.round(Math.min(1, faceProb) * 240));
+        }
+        if (clothProb > 0.55 || bgProb > 0.65) {
+          skinVal = Math.round(skinVal * (1 - Math.max(clothProb - 0.55, bgProb - 0.65) * 1.8));
+          skinVal = Math.max(0, skinVal);
+        } else if (hairProb > 0.65 && polySkin < 40) {
+          skinVal = Math.min(skinVal, 15);
+        }
+        if (polySkin > 180) {
+          fgProb = Math.max(fgProb, polySkin / 255);
+          solidProb = Math.max(solidProb, polySkin / 255);
+        }
+      } else if (segClasses) {
+        const sx = Math.min(segW - 1, Math.floor(nx * segW));
+        const segClass = segClasses[sy * segW + sx];
+        if (segClass === 2 && ny > face.mouthY) {
+          skinVal = Math.max(skinVal, 215);
         } else if (segClass === 3 && !pts) {
-          // Only use segmenter FaceSkin directly if 478-point mesh was not detected
           skinVal = Math.max(skinVal, 230);
         } else if (segClass === 0 || segClass === 1 || segClass === 4) {
-          // Background (0), Hair (1), or Clothes (4) -> suppress skin mask
           skinVal = Math.min(skinVal, segClass === 1 ? 15 : 0);
         }
+        hairVal = segClass === 1 ? 255 : 0;
+        fgProb = segClass === 0 ? 0 : 1;
+        clothProb = segClass === 4 ? 1 : 0;
+        solidProb = segClass >= 2 ? 1 : 0;
+        if (polySkin > 180) {
+          fgProb = Math.max(fgProb, polySkin / 255);
+          solidProb = Math.max(solidProb, polySkin / 255);
+        }
+      } else {
+        const headD2 = Math.pow((nx - face.centerX) / (face.faceRx * 1.5), 2) + Math.pow((ny - face.centerY) / (face.faceRy * 1.45), 2);
+        if (headD2 >= 0.82 && headD2 < 1.65 && ny < face.mouthY + 0.05 && polySkin < 40) {
+          hairVal = 255;
+        }
       }
-      // Strictly protect Eyebrows (110), Eyeshadow (125), Eyes (160), Lips (205), Teeth (245) from Skin Smoothing!
+
       if (featCode === 110 || featCode === 125 || featCode === 160 || featCode === 205 || featCode === 245) {
         skinVal = 0;
       }
 
-      // B: Hair Mask (Segmenter class 1 = Hair, or geometric crown/temple arch fallback)
-      let hairVal = 0;
-      let sceneVal = 255;
-      if (segClasses) {
-        hairVal = segClass === 1 ? 255 : 0;
-        if (segClass === 0) sceneVal = 0; // Background
-        else if (segClass === 4) sceneVal = 128; // Clothing
-        else sceneVal = 255; // Foreground person
-      } else {
-        const headD2 = Math.pow((nx - face.centerX) / (face.faceRx * 1.5), 2) + Math.pow((ny - face.centerY) / (face.faceRy * 1.45), 2);
-        const torsoD2 = Math.pow((nx - face.centerX) / (face.faceRx * 2.4), 2) + Math.pow((ny - (face.centerY + face.faceRy * 2.1)) / (face.faceRy * 1.7), 2);
-        if (headD2 >= 0.82 && headD2 < 1.65 && ny < face.mouthY + 0.05 && polySkin < 40) {
-          hairVal = 255;
-        }
-        if (torsoD2 < 1.0 && ny > face.chinY) {
-          sceneVal = 128;
-        } else if (headD2 > 1.45 && torsoD2 > 1.05) {
-          sceneVal = 0;
-        }
-      }
+      outData[idx] = skinVal;
+      outData[idx + 1] = featCode;
+      outData[idx + 2] = hairVal;
+      outData[idx + 3] = 255;
 
-      outData[idx] = skinVal;      // R = Protected Skin Mask (Eyes, Brows, Nostrils, Lips = 0!)
-      outData[idx + 1] = featCode; // G = Exact Discrete Anatomical Feature ID
-      outData[idx + 2] = hairVal;  // B = Neural Hair Mask
-      outData[idx + 3] = sceneVal; // A = Background (0) / Clothing (128) / Person (255)
+      if (sceneData) {
+        sceneData[idx] = Math.round(fgProb * 255);
+        sceneData[idx + 1] = Math.round(clothProb * 255);
+        sceneData[idx + 2] = Math.round(solidProb * 255);
+        sceneData[idx + 3] = 255;
+      }
     }
   }
 
   cCtx.putImageData(outImg, 0, 0);
   const maskBase64 = combinedCanvas.toDataURL('image/png');
 
+  let sceneMaskBase64 = null;
+  if (sceneCanvas && scCtx && sceneImg) {
+    scCtx.putImageData(sceneImg, 0, 0);
+    sceneMaskBase64 = sceneCanvas.toDataURL('image/png');
+  }
+
   return {
     face,
     mesh478: pts,
     maskBase64,
+    sceneMaskBase64,
     landmarksDetected,
   };
 }
