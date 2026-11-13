@@ -139,6 +139,17 @@
             <button
               type="button"
               class="left-rail-btn"
+              data-ltab="ltab-history"
+              title="Lịch sử chỉnh sửa"
+            >
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+                <circle cx="12" cy="12" r="9" />
+                <polyline points="12 7 12 12 15.5 14" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="left-rail-btn"
               data-ltab="ltab-project"
               title="Dự án &amp; Hồ sơ AI"
             >
@@ -163,6 +174,13 @@
               <span id="left-panel-heading">Cài sẵn</span>
               <div class="left-floating-actions">
                 <button id="btn-save-user-preset" class="icon-tiny-btn" title="Lưu bộ thông số hiện tại thành Cài sẵn của tôi">+</button>
+                <button id="btn-clear-history" class="icon-tiny-btn hidden" title="Xóa danh sách lịch sử chỉnh sửa">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <path d="M3 6h18" />
+                    <path d="M8 6V4h8v2" />
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                  </svg>
+                </button>
                 <button id="btn-close-left" class="icon-tiny-btn" title="Thu gọn bảng bên trái">×</button>
               </div>
             </div>
@@ -176,35 +194,43 @@
               </div>
 
               <div class="preset-search-box">
-                <input id="preset-search" type="text" placeholder="Tìm nhanh cài sẵn..." />
+                <svg class="preset-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="m20 20-3.5-3.5" />
+                </svg>
+                <input id="preset-search" type="text" placeholder="Tất cả Cài Sẵn..." />
               </div>
 
               <div id="recommended-presets-wrap" class="preset-scroll-inner">
                 <div class="preset-category">
                   <div class="preset-cat-header">▾ Chân dung &amp; Làm đẹp</div>
                   <div class="preset-grid-2col">
-                    <button class="retouch-preset-item" data-preset="clean_natural">
+                    <button class="retouch-preset-item" data-preset="clean_natural" title="Giữ lỗ chân lông + sáng mắt nhẹ">
+                      <span class="preset-thumb preset-thumb--clean_natural" aria-hidden="true"></span>
                       <span class="preset-badge">AI</span>
                       <div class="preset-meta">
                         <div class="p-title">Chân dung tự nhiên</div>
                         <div class="p-sub">Giữ lỗ chân lông + sáng mắt nhẹ</div>
                       </div>
                     </button>
-                    <button class="retouch-preset-item" data-preset="high_fashion">
+                    <button class="retouch-preset-item" data-preset="high_fashion" title="Tách tần số + tạo khối 3D">
+                      <span class="preset-thumb preset-thumb--high_fashion" aria-hidden="true"></span>
                       <span class="preset-badge">PRO</span>
                       <div class="preset-meta">
                         <div class="p-title">Da tạp chí cao cấp</div>
                         <div class="p-sub">Tách tần số + tạo khối 3D</div>
                       </div>
                     </button>
-                    <button class="retouch-preset-item" data-preset="glamour_makeup">
+                    <button class="retouch-preset-item" data-preset="glamour_makeup" title="Má hồng + tạo khối + son berry">
+                      <span class="preset-thumb preset-thumb--glamour_makeup" aria-hidden="true"></span>
                       <span class="preset-badge">AI</span>
                       <div class="preset-meta">
                         <div class="p-title">Trang điểm &amp; Rạng rỡ</div>
                         <div class="p-sub">Má hồng + tạo khối + son berry</div>
                       </div>
                     </button>
-                    <button class="retouch-preset-item" data-preset="wedding_luminous">
+                    <button class="retouch-preset-item" data-preset="wedding_luminous" title="Da ấm dịu + làm trắng răng">
+                      <span class="preset-thumb preset-thumb--wedding_luminous" aria-hidden="true"></span>
                       <span class="preset-badge">AI</span>
                       <div class="preset-meta">
                         <div class="p-title">Ảnh cưới sáng trong</div>
@@ -217,28 +243,32 @@
                 <div class="preset-category">
                   <div class="preset-cat-header">▾ Studio &amp; Nghệ thuật</div>
                   <div class="preset-grid-2col">
-                    <button class="retouch-preset-item" data-preset="corporate_exec">
+                    <button class="retouch-preset-item" data-preset="corporate_exec" title="Giảm quầng thâm + bóng dầu + phẳng áo">
+                      <span class="preset-thumb preset-thumb--corporate_exec" aria-hidden="true"></span>
                       <span class="preset-badge">PRO</span>
                       <div class="preset-meta">
                         <div class="p-title">Doanh nhân chuyên nghiệp</div>
                         <div class="p-sub">Giảm quầng thâm + bóng dầu + phẳng áo</div>
                       </div>
                     </button>
-                    <button class="retouch-preset-item" data-preset="passport_id">
+                    <button class="retouch-preset-item" data-preset="passport_id" title="Nền trắng sạch + xóa tóc con">
+                      <span class="preset-thumb preset-thumb--passport_id" aria-hidden="true"></span>
                       <span class="preset-badge">THẺ</span>
                       <div class="preset-meta">
                         <div class="p-title">Ảnh thẻ nền trắng</div>
                         <div class="p-sub">Nền trắng sạch + xóa tóc con</div>
                       </div>
                     </button>
-                    <button class="retouch-preset-item" data-preset="cinematic_film">
+                    <button class="retouch-preset-item" data-preset="cinematic_film" title="Phân màu phim + xóa phông bokeh">
+                      <span class="preset-thumb preset-thumb--cinematic_film" aria-hidden="true"></span>
                       <span class="preset-badge">LUT</span>
                       <div class="preset-meta">
                         <div class="p-title">Phim điện ảnh Teal &amp; Cam</div>
                         <div class="p-sub">Phân màu phim + xóa phông bokeh</div>
                       </div>
                     </button>
-                    <button class="retouch-preset-item" data-preset="bw_dramatic">
+                    <button class="retouch-preset-item" data-preset="bw_dramatic" title="Tương phản cao + hạt phim mịn">
+                      <span class="preset-thumb preset-thumb--bw_dramatic" aria-hidden="true"></span>
                       <span class="preset-badge">Đ&amp;T</span>
                       <div class="preset-meta">
                         <div class="p-title">Studio Đen Trắng</div>
@@ -254,6 +284,21 @@
                   <span>▾ Cài sẵn của tôi</span>
                 </div>
                 <div id="user-presets-container" class="preset-grid-2col"></div>
+              </div>
+            </div>
+
+            <!-- NGĂN LỊCH SỬ CHỈNH SỬA (EVOTO HISTORY) -->
+            <div id="ltab-history" class="left-tab-content">
+              <div class="history-photo-bar">
+                <svg class="history-photo-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <rect x="3" y="4" width="18" height="16" rx="2" />
+                  <circle cx="8.5" cy="9.5" r="1.5" />
+                  <path d="m21 15-4.5-4.5a2 2 0 0 0-2.82 0L6 18" />
+                </svg>
+                <span id="history-photo-name" class="history-photo-name">Chưa chọn ảnh</span>
+              </div>
+              <div id="history-list" class="history-list">
+                <div class="history-empty-note">Mở hoặc chọn một ảnh để xem lịch sử chỉnh sửa.</div>
               </div>
             </div>
 
@@ -766,22 +811,190 @@
               </div>
 
               <div class="retouch-acc-group collapsed">
-                <div class="retouch-acc-title">▾ Làm đẹp tóc</div>
+                <div class="retouch-acc-title cloth-acc-header">
+                  <span>▾ Điều chỉnh tóc</span>
+                  <button type="button" id="btn-hair-reset" class="cloth-reset-btn" title="Đặt lại toàn bộ điều chỉnh tóc">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+                      <path d="M3 3v5h5" />
+                    </svg>
+                  </button>
+                </div>
                 <div class="retouch-acc-body">
-                  <div class="retouch-slider-item"><div class="s-head"><span>Xóa tóc con / tóc bay</span><span class="val" data-for="strayHair">0</span></div><input type="range" class="retouch-slider" id="strayHair" min="0" max="100" value="0" /></div>
-                  <div class="retouch-slider-item"><div class="s-head"><span>Làm phồng chân tóc</span><span class="val" data-for="hairVolume">0</span></div><input type="range" class="retouch-slider" id="hairVolume" min="0" max="100" value="0" /></div>
-                  <div class="retouch-slider-item"><div class="s-head"><span>Làm dày đường rẽ ngôi</span><span class="val" data-for="hairPartLine">0</span></div><input type="range" class="retouch-slider" id="hairPartLine" min="0" max="100" value="0" /></div>
-                  <div class="retouch-slider-item"><div class="s-head"><span>Độ bóng mượt tóc</span><span class="val" data-for="hairShine">0</span></div><input type="range" class="retouch-slider" id="hairShine" min="0" max="100" value="0" /></div>
-                  <div class="retouch-slider-item"><div class="s-head"><span>Độ đậm màu nhuộm tóc</span><span class="val" data-for="hairDyeStrength">0</span></div><input type="range" class="retouch-slider" id="hairDyeStrength" min="0" max="100" value="0" /></div>
+                  <!-- Subgroup 1: Chỉnh sửa hình dáng tóc -->
+                  <div class="hair-subhead">Chỉnh sửa hình dáng tóc</div>
                   <div class="retouch-slider-item">
-                    <div class="s-head"><span>Màu nhuộm tóc</span></div>
-                    <select id="hairDyeColor" class="retouch-select">
-                      <option value="none">Giữ màu tóc gốc</option>
-                      <option value="espresso">Nâu Đen Espresso</option>
-                      <option value="golden_blonde">Vàng Mật Ong (Blonde)</option>
-                      <option value="auburn">Nâu Đỏ Đồng (Auburn)</option>
-                      <option value="silver_ash">Xám Khói Bạc (Silver Ash)</option>
-                    </select>
+                    <div class="s-head"><span>Làm đầy điểm hói</span><span class="val" data-for="hairPartLine">0</span></div>
+                    <input type="range" class="retouch-slider" id="hairPartLine" min="0" max="100" value="0" />
+                  </div>
+                  <div class="retouch-slider-item">
+                    <div class="s-head">
+                      <span class="cloth-label-with-badges">
+                        Độ Dày Tóc Đỉnh Đầu
+                        <span class="cloth-help-dot" title="Tăng/giảm độ phồng đỉnh đầu (hộp sọ cao)">?</span>
+                      </span>
+                      <span class="val" data-for="hairVolume">0</span>
+                    </div>
+                    <input type="range" class="retouch-slider hair-centered" id="hairVolume" min="-100" max="100" value="0" />
+                  </div>
+                  <div class="retouch-slider-item">
+                    <div class="s-head"><span>Tăng lượng tóc hai bên</span></div>
+                    <div class="hair-dual-row">
+                      <div class="hair-dual-col">
+                        <div class="s-head"><span>Trái</span><span class="val" data-for="hairSideLeftVolume">0</span></div>
+                        <input type="range" class="retouch-slider hair-centered" id="hairSideLeftVolume" min="-100" max="100" value="0" />
+                      </div>
+                      <button type="button" id="btn-hair-side-link" class="cloth-link-btn hair-side-link active" aria-pressed="true" title="Liên kết lượng tóc Trái &amp; Phải">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                        </svg>
+                      </button>
+                      <div class="hair-dual-col">
+                        <div class="s-head"><span>Phải</span><span class="val" data-for="hairSideRightVolume">0</span></div>
+                        <input type="range" class="retouch-slider hair-centered" id="hairSideRightVolume" min="-100" max="100" value="0" />
+                      </div>
+                    </div>
+                  </div>
+                  <div class="retouch-slider-item">
+                    <div class="s-head"><span>Đường chân tóc</span><span class="val" data-for="hairlineAdjust">0</span></div>
+                    <input type="range" class="retouch-slider hair-centered" id="hairlineAdjust" min="-100" max="100" value="0" />
+                  </div>
+
+                  <div class="bg-divider" style="margin: 10px 0;"></div>
+
+                  <!-- Subgroup 2: Hoàn thiện tóc -->
+                  <div class="hair-subhead">Hoàn thiện tóc</div>
+                  <div class="retouch-slider-item">
+                    <div class="s-head">
+                      <span>Loại bỏ tóc gãy</span>
+                      <span class="cloth-val-with-arrow">
+                        <span class="val" data-for="strayHair">0</span>
+                        <button type="button" id="btn-hair-stray-expand" class="cloth-sub-arrow" aria-expanded="false" title="Mở tùy chọn vùng xóa tóc con">▸</button>
+                      </span>
+                    </div>
+                    <input type="range" class="retouch-slider" id="strayHair" min="0" max="100" value="0" />
+                    <div id="hair-stray-drawer" class="cloth-sub-drawer hidden">
+                      <div class="s-head" style="margin-top: 6px;"><span>Trong đường viền nhân vật</span><span class="val" data-for="strayHairInner">100</span></div>
+                      <input type="range" class="retouch-slider" id="strayHairInner" min="0" max="100" value="100" />
+                      <div class="s-head" style="margin-top: 6px;"><span>Ngoài đường viền nhân vật</span><span class="val" data-for="strayHairOuter">100</span></div>
+                      <input type="range" class="retouch-slider" id="strayHairOuter" min="0" max="100" value="100" />
+                    </div>
+                  </div>
+                  <div class="retouch-slider-item">
+                    <div class="s-head">
+                      <span>Làm mượt tóc</span>
+                      <span class="cloth-val-with-arrow">
+                        <span class="val" data-for="hairSmooth">0</span>
+                        <button type="button" id="btn-hair-smooth-expand" class="cloth-sub-arrow" aria-expanded="false" title="Mở tinh chỉnh giảm xơ rối">▸</button>
+                      </span>
+                    </div>
+                    <input type="range" class="retouch-slider" id="hairSmooth" min="0" max="100" value="0" />
+                    <div id="hair-smooth-drawer" class="cloth-sub-drawer hidden">
+                      <div class="s-head" style="margin-top: 6px;"><span>Giảm xơ rối</span><span class="val" data-for="hairFrizzy">100</span></div>
+                      <input type="range" class="retouch-slider" id="hairFrizzy" min="0" max="100" value="100" />
+                    </div>
+                  </div>
+                  <div class="retouch-slider-item">
+                    <div class="s-head"><span>Tăng độ bóng cho tóc</span><span class="val" data-for="hairShine">0</span></div>
+                    <input type="range" class="retouch-slider" id="hairShine" min="0" max="100" value="0" />
+                  </div>
+
+                  <div class="bg-divider" style="margin: 10px 0;"></div>
+
+                  <!-- Subgroup 3: Chỉnh sửa màu tóc -->
+                  <div class="hair-subhead">Chỉnh sửa màu tóc</div>
+                  <div class="retouch-slider-item">
+                    <div class="s-head">
+                      <span class="cloth-label-with-badges">
+                        Tóc Đen Tóc Bạc
+                        <span class="evoto-beta-badge">Beta</span>
+                      </span>
+                      <span class="val" data-for="whiteHairBlacken">0</span>
+                    </div>
+                    <input type="range" class="retouch-slider" id="whiteHairBlacken" min="0" max="100" value="0" />
+                  </div>
+                  <div class="retouch-slider-item">
+                    <div class="s-head">
+                      <span class="cloth-label-with-badges">
+                        Thống Nhất Màu Tóc
+                        <span class="evoto-beta-badge">Beta</span>
+                      </span>
+                      <span class="val" data-for="hairColorUnify">0</span>
+                    </div>
+                    <input type="range" class="retouch-slider hair-centered" id="hairColorUnify" min="-100" max="100" value="0" />
+                  </div>
+
+                  <div class="hair-color-section">
+                    <div class="hair-subhead" style="margin-bottom: 8px;">Màu Tóc</div>
+                    <div class="hair-color-grid" id="hair-color-grid">
+                      <button type="button" class="hair-color-card active" data-haircolor="none" title="Giữ màu tóc gốc">
+                        <span class="hair-swatch-preview hair-swatch-none">⊘</span>
+                        <span class="hair-swatch-code">Trống</span>
+                      </button>
+                      <button type="button" class="hair-color-card" data-haircolor="h01" data-deg="60" title="H01 - Nâu Trà Lạnh">
+                        <span class="hair-swatch-preview" style="background: linear-gradient(155deg, #988374 0%, #7C695B 55%, #4f4137 100%)"></span>
+                        <span class="hair-swatch-code" style="background: #7C695B">H01</span>
+                      </button>
+                      <button type="button" class="hair-color-card" data-haircolor="h02" data-deg="60" title="H02 - Nâu Trà Sữa">
+                        <span class="hair-swatch-preview" style="background: linear-gradient(155deg, #a6745d 0%, #895C49 55%, #5b3b2e 100%)"></span>
+                        <span class="hair-swatch-code" style="background: #895C49">H02</span>
+                      </button>
+                      <button type="button" class="hair-color-card" data-haircolor="h03" data-deg="60" title="H03 - Nâu Cam Tây">
+                        <span class="hair-swatch-preview" style="background: linear-gradient(155deg, #dd9269 0%, #C67951 55%, #8a4b2b 100%)"></span>
+                        <span class="hair-swatch-code" style="background: #C67951">H03</span>
+                      </button>
+                      <button type="button" class="hair-color-card" data-haircolor="h04" data-deg="60" title="H04 - Đỏ Nâu Ánh Sáng">
+                        <span class="hair-swatch-preview" style="background: linear-gradient(155deg, #b86c71 0%, #9C5459 55%, #663034 100%)"></span>
+                        <span class="hair-swatch-code" style="background: #9C5459">H04</span>
+                      </button>
+                      <button type="button" class="hair-color-card" data-haircolor="h05" data-deg="50" title="H05 - Đỏ Rượu">
+                        <span class="hair-swatch-preview" style="background: linear-gradient(155deg, #ca736f 0%, #AD5956 55%, #753431 100%)"></span>
+                        <span class="hair-swatch-code" style="background: #AD5956">H05</span>
+                      </button>
+                      <button type="button" class="hair-color-card" data-haircolor="h06" data-deg="50" title="H06 - Nâu Hồng Phấn">
+                        <span class="hair-swatch-preview" style="background: linear-gradient(155deg, #b58d88 0%, #98726E 55%, #654744 100%)"></span>
+                        <span class="hair-swatch-code" style="background: #98726E">H06</span>
+                      </button>
+                      <button type="button" class="hair-color-card" data-haircolor="h07" data-deg="70" title="H07 - Hồng Tử Đằng">
+                        <span class="hair-swatch-preview" style="background: linear-gradient(155deg, #e5b0ad 0%, #CE9390 55%, #996260 100%)"></span>
+                        <span class="hair-swatch-code" style="background: #CE9390">H07</span>
+                      </button>
+                      <button type="button" class="hair-color-card" data-haircolor="h08" data-deg="50" title="H08 - Đen Tự Nhiên">
+                        <span class="hair-swatch-preview" style="background: linear-gradient(155deg, #776359 0%, #5D4B43 55%, #2f241f 100%)"></span>
+                        <span class="hair-swatch-code" style="background: #5D4B43">H08</span>
+                      </button>
+                      <button type="button" class="hair-color-card" data-haircolor="h09" data-deg="60" title="H09 - Đen Ánh Xanh">
+                        <span class="hair-swatch-preview" style="background: linear-gradient(155deg, #7e849d 0%, #646980 55%, #373b4c 100%)"></span>
+                        <span class="hair-swatch-code" style="background: #646980">H09</span>
+                      </button>
+                      <button type="button" class="hair-color-card" data-haircolor="h10" data-deg="60" title="H10 - Tím Nho">
+                        <span class="hair-swatch-preview" style="background: linear-gradient(155deg, #b87387 0%, #9B586C 55%, #653141 100%)"></span>
+                        <span class="hair-swatch-code" style="background: #9B586C">H10</span>
+                      </button>
+                      <button type="button" class="hair-color-card" data-haircolor="h11" data-deg="60" title="H11 - Tím Khói Xanh">
+                        <span class="hair-swatch-preview" style="background: linear-gradient(155deg, #98889e 0%, #7C6D82 55%, #4d4252 100%)"></span>
+                        <span class="hair-swatch-code" style="background: #7C6D82">H11</span>
+                      </button>
+                      <button type="button" class="hair-color-card" data-haircolor="h12" data-deg="60" title="H12 - Nâu Rêu Lanh">
+                        <span class="hair-swatch-preview" style="background: linear-gradient(155deg, #8d8b79 0%, #716F60 55%, #47463a 100%)"></span>
+                        <span class="hair-swatch-code" style="background: #716F60">H12</span>
+                      </button>
+                      <button type="button" class="hair-color-card" data-haircolor="h13" data-deg="60" title="H13 - Xám Rêu Khói">
+                        <span class="hair-swatch-preview" style="background: linear-gradient(155deg, #919c7a 0%, #758060 55%, #4a523a 100%)"></span>
+                        <span class="hair-swatch-code" style="background: #758060">H13</span>
+                      </button>
+                    </div>
+                    <div id="hair-dye-controls" class="hair-dye-controls" style="margin-top: 10px;">
+                      <div class="retouch-slider-item">
+                        <div class="s-head"><span>Mức độ màu nhuộm</span><span class="val" data-for="hairDyeStrength">0</span></div>
+                        <input type="range" class="retouch-slider" id="hairDyeStrength" min="0" max="100" value="0" />
+                      </div>
+                      <div class="retouch-slider-item" style="margin-bottom: 0;">
+                        <div class="s-head"><span>Làm tối tóc</span><span class="val" data-for="hairDyeDarken">0</span></div>
+                        <input type="range" class="retouch-slider" id="hairDyeDarken" min="0" max="100" value="0" />
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -897,6 +1110,10 @@
                       <button type="button" id="btn-liying-level-only" class="btn-liying-secondary" title="Chỉ cân bằng vai & canh giữa mặt (giữ nguyên nền)">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18"/><path d="M8 7l-3 5 3 5"/><path d="M16 7l3 5-3 5"/></svg>
                         <span>Cân vai</span>
+                      </button>
+                      <button type="button" id="btn-liying-cancel" class="btn-liying-secondary btn-liying-cancel" title="Hủy xử lý hoặc khôi phục lại ảnh trước khi tách & thay nền">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>
+                        <span>Hủy</span>
                       </button>
                     </div>
                   </div>

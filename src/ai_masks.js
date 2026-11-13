@@ -313,6 +313,47 @@ export async function analyzePhotoWithNeuralAI(imgElement, fallbackFace) {
     }
   }
 
+  // 2b. High-Density Head Crop Pass: for upper-body / full-body portraits where the face is smaller,
+  // re-run ImageSegmenter on a tight head+shoulders crop so 256x256 hair resolution increases ~2.5-3.5x!
+  let headConfs = null;
+  let headW = 0;
+  let headH = 0;
+  let hCrop = null;
+  if (portraitSegmenter && segConfs && face.faceRy < 0.36) {
+    const x0 = Math.max(0, face.centerX - face.faceRx * 2.45);
+    const x1 = Math.min(1, face.centerX + face.faceRx * 2.45);
+    const y0 = Math.max(0, (face.foreheadY ?? face.centerY - face.faceRy) - face.faceRy * 1.45);
+    const y1 = Math.min(1, (face.chinY ?? face.centerY + face.faceRy) + face.faceRy * 1.35);
+    if (x1 - x0 > 0.16 && y1 - y0 > 0.16 && (x1 - x0 < 0.86 || y1 - y0 < 0.86)) {
+      let headSegRes = null;
+      try {
+        const sx = Math.floor(x0 * natW);
+        const sy = Math.floor(y0 * natH);
+        const sw = Math.max(16, Math.round((x1 - x0) * natW));
+        const sh = Math.max(16, Math.round((y1 - y0) * natH));
+        const headCanvas = document.createElement('canvas');
+        const hScale = Math.min(1, 512 / Math.max(sw, sh));
+        headCanvas.width = Math.max(64, Math.round(sw * hScale));
+        headCanvas.height = Math.max(64, Math.round(sh * hScale));
+        const hCtx = headCanvas.getContext('2d');
+        hCtx.drawImage(imgElement, sx, sy, sw, sh, 0, 0, headCanvas.width, headCanvas.height);
+        headSegRes = portraitSegmenter.segment(headCanvas);
+        if (headSegRes?.confidenceMasks && headSegRes.confidenceMasks.length >= 5) {
+          headW = headSegRes.confidenceMasks[0].width;
+          headH = headSegRes.confidenceMasks[0].height;
+          headConfs = headSegRes.confidenceMasks.map((mask) => new Float32Array(mask.getAsFloat32Array()));
+          hCrop = { x0, x1, y0, y1, w: x1 - x0, h: y1 - y0 };
+        }
+      } catch (_) {
+        headConfs = null;
+      } finally {
+        try {
+          headSegRes?.close?.();
+        } catch (_) {}
+      }
+    }
+  }
+
   // 3. Rasterize High-Precision Anatomical Polygons onto 512x512 layers
   // Layer A: Skin Polygon Canvas (White on face oval + forehead, Black carved out on Eyes+Eyelashes, Eyebrows, Nostrils, Lips!)
   const skinCanvas = document.createElement('canvas');
@@ -508,12 +549,27 @@ export async function analyzePhotoWithNeuralAI(imgElement, fallbackFace) {
       let solidProb = 0;
 
       if (segConfs) {
-        const bgProb = sampleConfidenceBilinear(segConfs[0], segW, segH, nx, ny);
-        const hairProb = sampleConfidenceBilinear(segConfs[1], segW, segH, nx, ny);
+        let bgProb = sampleConfidenceBilinear(segConfs[0], segW, segH, nx, ny);
+        let hairProb = sampleConfidenceBilinear(segConfs[1], segW, segH, nx, ny);
         const bodyProb = sampleConfidenceBilinear(segConfs[2], segW, segH, nx, ny);
-        const faceProb = sampleConfidenceBilinear(segConfs[3], segW, segH, nx, ny);
+        let faceProb = sampleConfidenceBilinear(segConfs[3], segW, segH, nx, ny);
         clothProb = sampleConfidenceBilinear(segConfs[4], segW, segH, nx, ny);
         const accProb = segConfs[5] ? sampleConfidenceBilinear(segConfs[5], segW, segH, nx, ny) : 0;
+
+        if (headConfs && hCrop && nx >= hCrop.x0 && nx <= hCrop.x1 && ny >= hCrop.y0 && ny <= hCrop.y1) {
+          const hnx = (nx - hCrop.x0) / hCrop.w;
+          const hny = (ny - hCrop.y0) / hCrop.h;
+          const edgeDist = Math.min(hnx, 1 - hnx, hny, 1 - hny);
+          const blend = Math.max(0, Math.min(1, edgeDist / 0.14)) * 0.78;
+          if (blend > 0.01) {
+            const hBg = sampleConfidenceBilinear(headConfs[0], headW, headH, hnx, hny);
+            const hHair = sampleConfidenceBilinear(headConfs[1], headW, headH, hnx, hny);
+            const hFace = sampleConfidenceBilinear(headConfs[3], headW, headH, hnx, hny);
+            bgProb = bgProb * (1 - blend) + hBg * blend;
+            hairProb = hairProb * (1 - blend) + hHair * blend;
+            faceProb = faceProb * (1 - blend) + hFace * blend;
+          }
+        }
 
         const personSum = Math.min(1, hairProb + bodyProb + faceProb + clothProb + accProb);
         fgProb = Math.max(0, Math.min(1, 0.5 * (1 - bgProb) + 0.5 * personSum));
@@ -534,12 +590,22 @@ export async function analyzePhotoWithNeuralAI(imgElement, fallbackFace) {
         if (clothProb > 0.55 || bgProb > 0.65) {
           skinVal = Math.round(skinVal * (1 - Math.max(clothProb - 0.55, bgProb - 0.65) * 1.8));
           skinVal = Math.max(0, skinVal);
-        } else if (hairProb > 0.65 && polySkin < 40) {
-          skinVal = Math.min(skinVal, 15);
+        } else if (
+          hairProb > 0.36 &&
+          featCode !== 160 &&
+          featCode !== 110 &&
+          featCode !== 205 &&
+          featCode !== 245
+        ) {
+          // Allow neural hair detection to reclaim forehead bangs instead of keeping geometric forehead skin=255
+          const hairOverSkin = Math.max(0, Math.min(1, (hairProb - 0.36) / 0.34));
+          skinVal = Math.round(skinVal * (1 - hairOverSkin * 0.94));
         }
-        if (polySkin > 180) {
+        if (polySkin > 180 && hairProb < 0.52) {
           fgProb = Math.max(fgProb, polySkin / 255);
           solidProb = Math.max(solidProb, polySkin / 255);
+        } else if (hairProb >= 0.45) {
+          fgProb = Math.max(fgProb, hairProb);
         }
       } else if (segClasses) {
         const sx = Math.min(segW - 1, Math.floor(nx * segW));
@@ -555,7 +621,7 @@ export async function analyzePhotoWithNeuralAI(imgElement, fallbackFace) {
         fgProb = segClass === 0 ? 0 : 1;
         clothProb = segClass === 4 ? 1 : 0;
         solidProb = segClass >= 2 ? 1 : 0;
-        if (polySkin > 180) {
+        if (polySkin > 180 && segClass !== 1) {
           fgProb = Math.max(fgProb, polySkin / 255);
           solidProb = Math.max(solidProb, polySkin / 255);
         }
@@ -587,6 +653,107 @@ export async function analyzePhotoWithNeuralAI(imgElement, fallbackFace) {
   cCtx.putImageData(outImg, 0, 0);
   const maskBase64 = combinedCanvas.toDataURL('image/png');
 
+  // Compute precise hair localization anchors from the fused B-channel
+  let hairMinX = 1, hairMaxX = 0, hairMinY = 1, hairMaxY = 0;
+  let hairCount = 0;
+  let crownSumX = 0, crownCnt = 0;
+  let headLeftX = 1, headLeftY = face.centerY - face.faceRy * 0.08, hasHeadLeft = false;
+  let headRightX = 0, headRightY = face.centerY - face.faceRy * 0.08, hasHeadRight = false;
+  let hairlineMaxY = -1;
+  const browLimitY = Math.min(face.leftEyeY, face.rightEyeY) - face.faceRy * 0.06;
+  const centerBandHalf = face.faceRx * 0.45;
+  const headSideMaxY = Math.min(0.98, face.chinY + face.faceRy * 0.16);
+  const sideRefY = face.centerY - face.faceRy * 0.06;
+
+  for (let y = 0; y < maskSize; y++) {
+    const ny = y / (maskSize - 1);
+    for (let x = 0; x < maskSize; x++) {
+      const idx = (y * maskSize + x) * 4;
+      const hv = outData[idx + 2];
+      const sv = outData[idx];
+      if (hv < 88 || sv > 140) continue;
+      const nx = x / (maskSize - 1);
+      hairCount++;
+      if (nx < hairMinX) hairMinX = nx;
+      if (nx > hairMaxX) hairMaxX = nx;
+      if (ny < hairMinY) hairMinY = ny;
+      if (ny > hairMaxY) hairMaxY = ny;
+      if (ny <= browLimitY && Math.abs(nx - face.centerX) <= centerBandHalf && hv >= 105) {
+        if (ny > hairlineMaxY) hairlineMaxY = ny;
+      }
+      if (ny <= headSideMaxY && hv >= 95) {
+        if (
+          nx < face.centerX &&
+          (!hasHeadLeft ||
+            nx < headLeftX - 0.006 ||
+            (Math.abs(nx - headLeftX) <= 0.006 && Math.abs(ny - sideRefY) < Math.abs(headLeftY - sideRefY)))
+        ) {
+          headLeftX = nx;
+          headLeftY = ny;
+          hasHeadLeft = true;
+        }
+        if (
+          nx > face.centerX &&
+          (!hasHeadRight ||
+            nx > headRightX + 0.006 ||
+            (Math.abs(nx - headRightX) <= 0.006 && Math.abs(ny - sideRefY) < Math.abs(headRightY - sideRefY)))
+        ) {
+          headRightX = nx;
+          headRightY = ny;
+          hasHeadRight = true;
+        }
+      }
+    }
+  }
+  const hasHairBounds = hairCount >= 30 && hairMaxX > hairMinX && hairMaxY > hairMinY;
+  if (hasHairBounds) {
+    const crownBandMaxY = hairMinY + 0.028;
+    for (let y = 0; y < maskSize; y++) {
+      const ny = y / (maskSize - 1);
+      if (ny > crownBandMaxY) break;
+      for (let x = 0; x < maskSize; x++) {
+        const idx = (y * maskSize + x) * 4;
+        if (outData[idx + 2] < 95 || outData[idx] > 140) continue;
+        crownSumX += x / (maskSize - 1);
+        crownCnt++;
+      }
+    }
+  }
+
+  const hairBounds = hasHairBounds
+    ? {
+        detected: true,
+        coverage: hairCount / (maskSize * maskSize),
+        minX: hasHeadLeft ? headLeftX : hairMinX,
+        maxX: hasHeadRight ? headRightX : hairMaxX,
+        minY: hairMinY,
+        maxY: hairMaxY,
+        crownX: crownCnt > 0 ? crownSumX / crownCnt : face.centerX,
+        crownY: hairMinY,
+        leftX: hasHeadLeft ? headLeftX : hairMinX,
+        leftY: hasHeadLeft ? headLeftY : sideRefY,
+        rightX: hasHeadRight ? headRightX : hairMaxX,
+        rightY: hasHeadRight ? headRightY : sideRefY,
+        hairlineX: face.centerX,
+        hairlineY: hairlineMaxY > hairMinY ? hairlineMaxY : face.foreheadY,
+      }
+    : {
+        detected: false,
+        coverage: 0,
+        minX: Math.max(0, face.centerX - face.faceRx * 1.15),
+        maxX: Math.min(1, face.centerX + face.faceRx * 1.15),
+        minY: Math.max(0.02, face.foreheadY - face.faceRy * 0.45),
+        maxY: Math.min(1, face.chinY),
+        crownX: face.centerX,
+        crownY: Math.max(0.02, face.foreheadY - face.faceRy * 0.45),
+        leftX: Math.max(0.02, face.centerX - face.faceRx * 1.15),
+        leftY: face.centerY - face.faceRy * 0.08,
+        rightX: Math.min(0.98, face.centerX + face.faceRx * 1.15),
+        rightY: face.centerY - face.faceRy * 0.08,
+        hairlineX: face.centerX,
+        hairlineY: face.foreheadY,
+      };
+
   let sceneMaskBase64 = null;
   if (sceneCanvas && scCtx && sceneImg) {
     scCtx.putImageData(sceneImg, 0, 0);
@@ -598,6 +765,7 @@ export async function analyzePhotoWithNeuralAI(imgElement, fallbackFace) {
     mesh478: pts,
     maskBase64,
     sceneMaskBase64,
+    hairBounds,
     landmarksDetected,
   };
 }

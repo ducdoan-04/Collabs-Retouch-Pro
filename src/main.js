@@ -64,12 +64,22 @@ export function createDefaultParams() {
     makeupLipstick: 0,
     makeupLipTint: 'rose',
 
-    // 7. Hair
+    // 7. Hair (Evoto HairBeauty)
     strayHair: 0,
+    strayHairInner: 100,
+    strayHairOuter: 100,
     hairVolume: 0,
+    hairSideLeftVolume: 0,
+    hairSideRightVolume: 0,
+    hairlineAdjust: 0,
     hairPartLine: 0,
+    hairSmooth: 0,
+    hairFrizzy: 100,
     hairShine: 0,
+    whiteHairBlacken: 0,
+    hairColorUnify: 0,
     hairDyeStrength: 0,
+    hairDyeDarken: 0,
     hairDyeColor: 'none',
 
     // 8. Body Reshape
@@ -451,6 +461,7 @@ const state = {
   bgMoreExpanded: false,
   customBgGallery: [], // { id, name, dataUrl, fav }
   clothWrinkleLinked: true,
+  hairSideLinked: true,
   presetScope: 'all', // 'all' | 'recommended' | 'mine'
   histOpen: true,
   copiedParams: null,
@@ -628,6 +639,7 @@ function capturePhotoSnapshot(photo) {
     maskBase64: photo.maskBase64 || null,
     sceneMaskBase64: photo.sceneMaskBase64 || null,
     highresMatteBase64: photo.highresMatteBase64 || null,
+    hairBounds: photo.hairBounds || null,
     _matteSourceRef: photo._matteSourceRef || null,
     landmarksDetected: Boolean(photo.landmarksDetected),
     isLiyingOutput: Boolean(photo._isLiyingOutput),
@@ -638,10 +650,10 @@ function capturePhotoSnapshot(photo) {
 function updateHistoryButtonsUI(photo = getActivePhoto()) {
   const undoBtn = document.getElementById('btn-undo');
   const redoBtn = document.getElementById('btn-redo');
-  if (!undoBtn && !redoBtn) return;
   const hist = photo ? ensurePhotoHistory(photo) : null;
   if (undoBtn) undoBtn.disabled = !hist || hist.undoStack.length === 0;
   if (redoBtn) redoBtn.disabled = !hist || hist.redoStack.length === 0;
+  renderHistoryPanel(photo);
 }
 
 function initPhotoHistory(photo) {
@@ -698,6 +710,9 @@ async function applyHistorySnapshot(photo, targetSnap, prevSnap) {
     photo.maskBase64 = targetSnap.maskBase64 || null;
     photo.sceneMaskBase64 = targetSnap.sceneMaskBase64 || null;
     photo.highresMatteBase64 = targetSnap.highresMatteBase64 || null;
+    photo.hairBounds = targetSnap.hairBounds || null;
+    photo._hairGuideCanvas = null;
+    photo._hairGuideMaskRef = null;
     photo._matteSourceRef = targetSnap._matteSourceRef || null;
     photo.landmarksDetected = Boolean(targetSnap.landmarksDetected);
     photo._isLiyingOutput = Boolean(targetSnap.isLiyingOutput);
@@ -758,6 +773,312 @@ async function redoActivePhoto() {
   await applyHistorySnapshot(photo, targetSnap, prevSnap);
   updateHistoryButtonsUI(photo);
   renderTimeLabel.textContent = `Đã làm lại (${hist.redoStack.length} bước sau) ✓`;
+}
+
+const HISTORY_PARAM_META = {
+  // Khuyết điểm
+  freckleAcne: { cat: 'Xử lý khuyết điểm', label: 'Xóa mụn & tàn nhang' },
+  faceMole: { cat: 'Xử lý khuyết điểm', label: 'Xóa nốt ruồi' },
+  faceShine: { cat: 'Xử lý khuyết điểm', label: 'Giảm bóng dầu' },
+  darkCircles: { cat: 'Xử lý khuyết điểm', label: 'Xóa quầng thâm' },
+  eyeBags: { cat: 'Xử lý khuyết điểm', label: 'Xóa bọng mắt' },
+  foreheadWrinkles: { cat: 'Xử lý khuyết điểm', label: 'Nếp nhăn trán' },
+  nasolabialFolds: { cat: 'Xử lý khuyết điểm', label: 'Rãnh cười' },
+  neckWrinkles: { cat: 'Xử lý khuyết điểm', label: 'Nếp nhăn cổ' },
+  glassesGlare: { cat: 'Xử lý khuyết điểm', label: 'Loại bỏ lóa kính' },
+  doubleChin: { cat: 'Xử lý khuyết điểm', label: 'Giảm nọng cằm' },
+  bodyBlemish: { cat: 'Xử lý khuyết điểm', label: 'Mụn & vết thâm cơ thể' },
+  blemishSpots: { cat: 'Xử lý khuyết điểm', label: 'Chấm xóa khuyết điểm' },
+  // Da
+  dodgeBurnEven: { cat: 'Làm mịn & Da', label: 'Làm đều màu da (D&B)' },
+  dodgeBurnSculpt: { cat: 'Làm mịn & Da', label: 'Tạo khối sáng tối (D&B)' },
+  freqSepLow: { cat: 'Làm mịn & Da', label: 'Làm mịn da (Tách tần số)' },
+  freqSepHigh: { cat: 'Làm mịn & Da', label: 'Giữ chi tiết lỗ chân lông' },
+  facialSkinSmooth: { cat: 'Làm mịn & Da', label: 'Làm mịn da mặt' },
+  bodySkinSmooth: { cat: 'Làm mịn & Da', label: 'Làm mịn da cơ thể' },
+  skinRadiance: { cat: 'Làm mịn & Da', label: 'Độ rạng rỡ da' },
+  skinRosy: { cat: 'Làm mịn & Da', label: 'Độ hồng hào da' },
+  skinWarmth: { cat: 'Làm mịn & Da', label: 'Tông da ấm / lạnh' },
+  unifyComplexion: { cat: 'Làm mịn & Da', label: 'Đồng nhất sắc da' },
+  // Tạo hình khuôn mặt
+  faceWidth: { cat: 'Tạo hình khuôn mặt', label: 'Thon mặt' },
+  jawlineSlim: { cat: 'Tạo hình khuôn mặt', label: 'Thon hàm' },
+  cheekboneLift: { cat: 'Tạo hình khuôn mặt', label: 'Gò má' },
+  chinLength: { cat: 'Tạo hình khuôn mặt', label: 'Độ dài cằm' },
+  foreheadHeight: { cat: 'Tạo hình khuôn mặt', label: 'Độ cao trán' },
+  noseWidth: { cat: 'Tạo hình khuôn mặt', label: 'Thu gọn cánh mũi' },
+  noseTipLift: { cat: 'Tạo hình khuôn mặt', label: 'Nâng đầu mũi' },
+  mouthSize: { cat: 'Tạo hình khuôn mặt', label: 'Cỡ miệng' },
+  lipPlump: { cat: 'Tạo hình khuôn mặt', label: 'Độ đầy môi' },
+  smileEnhance: { cat: 'Tạo hình khuôn mặt', label: 'Nâng khóe miệng cười' },
+  // Mắt & Răng & Trang điểm
+  eyeSize: { cat: 'Mắt & Lông mày', label: 'Mở to mắt' },
+  eyeBrighten: { cat: 'Mắt & Lông mày', label: 'Sáng lòng mắt' },
+  redVeins: { cat: 'Mắt & Lông mày', label: 'Xóa tia máu mắt' },
+  catchlightBoost: { cat: 'Mắt & Lông mày', label: 'Tăng ánh sao mắt' },
+  eyebrowThickness: { cat: 'Mắt & Lông mày', label: 'Độ đậm lông mày' },
+  eyebrowLift: { cat: 'Mắt & Lông mày', label: 'Nâng cung mày' },
+  teethWhiten: { cat: 'Răng & Nụ cười', label: 'Làm trắng răng' },
+  teethDesaturate: { cat: 'Răng & Nụ cười', label: 'Khử ố vàng răng' },
+  teethBrighten: { cat: 'Răng & Nụ cười', label: 'Làm sáng răng' },
+  makeupHighlight: { cat: 'Trang điểm', label: 'Highlight bắt sáng' },
+  makeupContour: { cat: 'Trang điểm', label: 'Tạo khối khối mặt' },
+  makeupBlush: { cat: 'Trang điểm', label: 'Má hồng' },
+  makeupEyeshadow: { cat: 'Trang điểm', label: 'Phấn mắt' },
+  makeupLipstick: { cat: 'Trang điểm', label: 'Son môi' },
+  makeupLipTint: { cat: 'Trang điểm', label: 'Màu son môi' },
+  // Tóc (Evoto Hair)
+  strayHair: { cat: 'Điều chỉnh tóc', label: 'Loại bỏ tóc gãy' },
+  strayHairInner: { cat: 'Điều chỉnh tóc', label: 'Tóc bay bên trong' },
+  strayHairOuter: { cat: 'Điều chỉnh tóc', label: 'Tóc bay bên ngoài' },
+  hairVolume: { cat: 'Điều chỉnh tóc', label: 'Độ Dày Tóc Đỉnh Đầu' },
+  hairSideLeftVolume: { cat: 'Điều chỉnh tóc', label: 'Tăng lượng tóc trái' },
+  hairSideRightVolume: { cat: 'Điều chỉnh tóc', label: 'Tăng lượng tóc phải' },
+  hairlineAdjust: { cat: 'Điều chỉnh tóc', label: 'Đường chân tóc' },
+  hairPartLine: { cat: 'Điều chỉnh tóc', label: 'Làm đầy đường ngôi' },
+  hairSmooth: { cat: 'Điều chỉnh tóc', label: 'Làm mượt tóc' },
+  hairFrizzy: { cat: 'Điều chỉnh tóc', label: 'Giảm tóc rối bông xù' },
+  hairShine: { cat: 'Điều chỉnh tóc', label: 'Tăng độ bóng cho tóc' },
+  whiteHairBlacken: { cat: 'Điều chỉnh tóc', label: 'Tóc Đen Tóc Bạc' },
+  hairColorUnify: { cat: 'Điều chỉnh tóc', label: 'Thống Nhất Màu Tóc' },
+  hairDyeStrength: { cat: 'Điều chỉnh tóc', label: 'Cường độ màu nhuộm' },
+  hairDyeDarken: { cat: 'Điều chỉnh tóc', label: 'Độ trầm màu tóc' },
+  hairDyeColor: { cat: 'Điều chỉnh tóc', label: 'Màu Tóc' },
+  // Dáng người
+  neckSlim: { cat: 'Dáng người', label: 'Thon cổ' },
+  shoulderSculpt: { cat: 'Dáng người', label: 'Cân & thon vai' },
+  waistSlim: { cat: 'Dáng người', label: 'Thon eo' },
+  // Trang phục & Phông nền
+  clothingTarget: { cat: 'Trang phục', label: 'Vùng trang phục' },
+  clothingDewrinkle: { cat: 'Trang phục', label: 'Là phẳng nếp nhăn áo' },
+  clothingSmallWrinkles: { cat: 'Trang phục', label: 'Nếp nhăn nhỏ' },
+  clothingLargeWrinkles: { cat: 'Trang phục', label: 'Nếp nhăn lớn' },
+  clothingLintClean: { cat: 'Trang phục', label: 'Làm sạch bụi vải' },
+  clothingSweatStain: { cat: 'Trang phục', label: 'Xóa vết ố mồ hôi' },
+  clothingEdgeSmooth: { cat: 'Trang phục', label: 'Mượt viền trang phục' },
+  clothingMoireRemove: { cat: 'Trang phục', label: 'Khử sọc Moiré' },
+  backdropClean: { cat: 'Phông nền', label: 'Làm sạch phông nền' },
+  backdropBandingFix: { cat: 'Phông nền', label: 'Khử vệt banding nền' },
+  skyEnhance: { cat: 'Phông nền', label: 'Tăng chiều sâu bầu trời' },
+  bgBlurBokeh: { cat: 'Phông nền', label: 'Xóa phông Bokeh' },
+  bgReplaceMode: { cat: 'Phông nền', label: 'Thay phông nền' },
+  bgCustomColor: { cat: 'Phông nền', label: 'Màu nền tùy chỉnh' },
+  bgCustomImage: { cat: 'Phông nền', label: 'Ảnh nền tùy chỉnh' },
+  // Màu sắc & Ống kính
+  temperature: { cat: 'Chỉnh màu & Ánh sáng', label: 'Nhiệt độ màu' },
+  tint: { cat: 'Chỉnh màu & Ánh sáng', label: 'Sắc thái Tint' },
+  exposure: { cat: 'Chỉnh màu & Ánh sáng', label: 'Độ phơi sáng' },
+  contrast: { cat: 'Chỉnh màu & Ánh sáng', label: 'Độ tương phản' },
+  highlights: { cat: 'Chỉnh màu & Ánh sáng', label: 'Vùng sáng' },
+  shadows: { cat: 'Chỉnh màu & Ánh sáng', label: 'Vùng tối' },
+  whites: { cat: 'Chỉnh màu & Ánh sáng', label: 'Điểm trắng' },
+  blacks: { cat: 'Chỉnh màu & Ánh sáng', label: 'Điểm đen' },
+  clarity: { cat: 'Chỉnh màu & Ánh sáng', label: 'Độ trong (Clarity)' },
+  texture: { cat: 'Chỉnh màu & Ánh sáng', label: 'Cấu trúc bề mặt' },
+  dehaze: { cat: 'Chỉnh màu & Ánh sáng', label: 'Khử sương mù' },
+  vibrance: { cat: 'Chỉnh màu & Ánh sáng', label: 'Độ tươi màu' },
+  saturation: { cat: 'Chỉnh màu & Ánh sáng', label: 'Độ bão hòa' },
+  lutPreset: { cat: 'Chỉnh màu & Ánh sáng', label: 'Bộ màu LUT' },
+  sharpenAmount: { cat: 'Chi tiết & Độ nét', label: 'Làm nét ảnh' },
+  noiseReduction: { cat: 'Chi tiết & Độ nét', label: 'Giảm nhiễu' },
+  aiDenoise: { cat: 'Chi tiết & Độ nét', label: 'Khử nhiễu AI' },
+  filmGrain: { cat: 'Hiệu ứng & Viền', label: 'Hạt phim' },
+  vignette: { cat: 'Hiệu ứng & Viền', label: 'Tối góc (Vignette)' },
+  opticsDistortion: { cat: 'Hiệu chỉnh ống kính', label: 'Hiệu chỉnh méo hình' },
+  opticsVignetting: { cat: 'Hiệu chỉnh ống kính', label: 'Chống tối góc ống kính' },
+  // Cắt & Xoay
+  rotateAngle: { cat: 'Cắt & Xoay', label: 'Xoay góc ảnh' },
+  keystoneVertical: { cat: 'Cắt & Xoay', label: 'Nghiêng dọc' },
+  keystoneHorizontal: { cat: 'Cắt & Xoay', label: 'Nghiêng ngang' },
+  flipHorizontal: { cat: 'Cắt & Xoay', label: 'Lật ngang' },
+  flipVertical: { cat: 'Cắt & Xoay', label: 'Lật dọc' },
+};
+
+function resolveHistoryParamMeta(key) {
+  if (HISTORY_PARAM_META[key]) return HISTORY_PARAM_META[key];
+  if (key.startsWith('crop')) return { cat: 'Cắt', label: 'Khung cắt' };
+  if (key.startsWith('geo')) return { cat: 'Cắt & Xoay', label: 'Tỉ lệ & Dịch khung' };
+  if (key.startsWith('hsl')) return { cat: 'HSL & Phân màu', label: 'Kênh màu HSL' };
+  if (key.startsWith('grade')) return { cat: 'Phân màu (Color Grading)', label: 'Bánh xe màu' };
+  if (key.startsWith('curve')) return { cat: 'Đường cong Tone', label: 'Tone Curve' };
+  if (key.startsWith('colorMatch')) return { cat: 'Khớp màu AI', label: 'Độ khớp màu mẫu' };
+  if (key.startsWith('bg')) return { cat: 'Phông nền', label: 'Cấu hình tách nền' };
+  if (key.startsWith('clothing')) return { cat: 'Trang phục', label: 'Xử lý trang phục' };
+  if (key.startsWith('optics')) return { cat: 'Hiệu chỉnh ống kính', label: 'Quang học' };
+  if (key.startsWith('bw') || key === 'treatment') return { cat: 'Chỉnh màu & Ánh sáng', label: 'Chế độ Đen Trắng' };
+  return { cat: 'Tinh chỉnh thông số', label: key };
+}
+
+function formatHistoryValue(key, val, defaultVal) {
+  if (val === 'none' || val === 'original') return 'Trống';
+  if (typeof val === 'string' && key === 'hairDyeColor') return val.toUpperCase();
+  if (typeof val === 'boolean') return val ? 'Bật' : 'Tắt';
+  if (Array.isArray(val)) return `${val.length} điểm`;
+  if (typeof val === 'number') {
+    if (defaultVal !== undefined && val === defaultVal) return 'Reset';
+    const rounded = Number.isInteger(val) ? val : Number(val.toFixed(1));
+    return rounded > 0 ? `+${rounded}` : String(rounded);
+  }
+  return String(val ?? '');
+}
+
+const DEFAULT_PARAM_REF = createDefaultParams();
+
+function describeHistoryStep(snap, prevSnap, index) {
+  if (index === 0 || !prevSnap) {
+    return { title: 'Ảnh gốc', param: 'Nhập ảnh ban đầu', value: '' };
+  }
+  if (snap.isLiyingOutput && !prevSnap.isLiyingOutput) {
+    return { title: 'LiYing AI Studio', param: 'Tách nền / Cân vai AI', value: 'Hoàn tất' };
+  }
+  if (snap.originalDataUrl !== prevSnap.originalDataUrl) {
+    return { title: 'Cập nhật ảnh nền / nguồn', param: 'Dữ liệu ảnh', value: 'Đã đổi' };
+  }
+  const changedKeys = [];
+  const allKeys = new Set([
+    ...Object.keys(snap.params || {}),
+    ...Object.keys(prevSnap.params || {}),
+  ]);
+  for (const k of allKeys) {
+    if (k === 'face') continue;
+    if (JSON.stringify(snap.params?.[k]) !== JSON.stringify(prevSnap.params?.[k])) {
+      changedKeys.push(k);
+    }
+  }
+  if (JSON.stringify(snap.curvePoints) !== JSON.stringify(prevSnap.curvePoints)) {
+    changedKeys.push('curveLut');
+  }
+  if (changedKeys.length === 0) {
+    if (snap.cropPreviewMode !== prevSnap.cropPreviewMode) {
+      return { title: 'Cắt', param: 'Xem trước khung cắt', value: snap.cropPreviewMode ? 'Bật' : 'Tắt' };
+    }
+    return { title: 'Cập nhật trạng thái', param: '', value: '' };
+  }
+
+  // Kiểm tra khôi phục mặc định toàn ảnh
+  const nonCropDefaultCount = changedKeys.filter(
+    (k) => !CROP_FRAME_PARAM_KEYS.has(k) && JSON.stringify(snap.params?.[k]) === JSON.stringify(DEFAULT_PARAM_REF[k])
+  ).length;
+  if (changedKeys.length >= 4 && nonCropDefaultCount >= Math.ceil(changedKeys.length * 0.75)) {
+    return { title: 'Đặt lại thông số ảnh', param: 'Toàn bộ thông số', value: 'Reset' };
+  }
+
+  // Nhiều key thuộc cùng nhóm Cắt
+  const allCrop = changedKeys.every((k) => CROP_FRAME_PARAM_KEYS.has(k));
+  if (allCrop) {
+    if (changedKeys.length === 1 && changedKeys[0] === 'cropPreset') {
+      return { title: 'Cắt', param: 'Tỉ lệ khung', value: String(snap.params.cropPreset || 'Tùy chỉnh') };
+    }
+    return { title: 'Cắt', param: '', value: '' };
+  }
+
+  if (changedKeys.length === 1) {
+    const k = changedKeys[0];
+    const meta = resolveHistoryParamMeta(k);
+    return {
+      title: meta.cat,
+      param: meta.label,
+      value: formatHistoryValue(k, snap.params?.[k], DEFAULT_PARAM_REF[k]),
+    };
+  }
+
+  const firstMeta = resolveHistoryParamMeta(changedKeys[0]);
+  const sameCategory = changedKeys.every((k) => resolveHistoryParamMeta(k).cat === firstMeta.cat);
+  if (sameCategory) {
+    return {
+      title: firstMeta.cat,
+      param: firstMeta.label,
+      value: `${changedKeys.length} mục`,
+    };
+  }
+  return {
+    title: 'Áp dụng Cài sẵn / Đồng bộ',
+    param: 'Thay đổi hàng loạt',
+    value: `${changedKeys.length} thông số`,
+  };
+}
+
+function renderHistoryPanel(photo = getActivePhoto()) {
+  const nameEl = document.getElementById('history-photo-name');
+  const listEl = document.getElementById('history-list');
+  if (!listEl) return;
+
+  if (!photo) {
+    if (nameEl) nameEl.textContent = 'Chưa chọn ảnh';
+    listEl.innerHTML = '<div class="history-empty-note">Mở hoặc chọn một ảnh để xem lịch sử chỉnh sửa.</div>';
+    return;
+  }
+
+  if (nameEl) nameEl.textContent = photo.name || 'Ảnh chưa đặt tên';
+  const hist = ensurePhotoHistory(photo);
+  const futureDesc = [...hist.redoStack].reverse();
+  const flat = [...hist.undoStack, hist.current, ...futureDesc];
+  const activeIdx = hist.undoStack.length;
+
+  listEl.innerHTML = '';
+  // Hiển thị mới nhất ở trên cùng giống Evoto
+  for (let idx = flat.length - 1; idx >= 0; idx--) {
+    const snap = flat[idx];
+    const prevSnap = idx > 0 ? flat[idx - 1] : null;
+    const desc = describeHistoryStep(snap, prevSnap, idx);
+
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'history-item';
+    if (idx === activeIdx) item.classList.add('active');
+    else if (idx > activeIdx) item.classList.add('future');
+    item.dataset.histIdx = String(idx);
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'history-item-title';
+    titleEl.textContent = desc.title;
+    item.appendChild(titleEl);
+
+    if (desc.param || desc.value) {
+      const subEl = document.createElement('div');
+      subEl.className = 'history-item-sub';
+
+      const paramEl = document.createElement('span');
+      paramEl.className = 'history-item-param';
+      paramEl.textContent = desc.param || '';
+
+      const valEl = document.createElement('span');
+      valEl.className = 'history-item-val';
+      valEl.textContent = desc.value || '';
+
+      subEl.appendChild(paramEl);
+      subEl.appendChild(valEl);
+      item.appendChild(subEl);
+    }
+
+    item.addEventListener('click', () => {
+      jumpToHistoryIndex(photo, idx);
+    });
+
+    listEl.appendChild(item);
+  }
+}
+
+async function jumpToHistoryIndex(photo, targetIdx) {
+  if (!photo || state.isRestoringHistory) return;
+  const hist = ensurePhotoHistory(photo);
+  const futureDesc = [...hist.redoStack].reverse();
+  const flat = [...hist.undoStack, hist.current, ...futureDesc];
+  if (targetIdx < 0 || targetIdx >= flat.length || targetIdx === hist.undoStack.length) {
+    return;
+  }
+
+  const prevSnap = hist.current;
+  const targetSnap = flat[targetIdx];
+  hist.undoStack = flat.slice(0, targetIdx);
+  hist.current = targetSnap;
+  hist.redoStack = flat.slice(targetIdx + 1).reverse();
+
+  await applyHistorySnapshot(photo, targetSnap, prevSnap);
+  updateHistoryButtonsUI(photo);
+  if (renderTimeLabel) {
+    renderTimeLabel.textContent = `Đã chuyển tới bước lịch sử #${targetIdx + 1} ✓`;
+  }
 }
 
 // =========================================================================
@@ -1568,6 +1889,75 @@ function drawCropOverlay(ctx, w, h, photo) {
   ctx.restore();
 }
 
+function ensureHairGuideOverlayCanvas(photo, onReady) {
+  if (!photo || !photo.maskBase64) return null;
+  if (photo._hairGuideCanvas && photo._hairGuideMaskRef === photo.maskBase64) {
+    return photo._hairGuideCanvas;
+  }
+  if (photo._hairGuideLoading) return null;
+  photo._hairGuideLoading = true;
+  const srcRef = photo.maskBase64;
+  loadImageElement(srcRef)
+    .then((img) => {
+      const mw = img.naturalWidth || img.width || 512;
+      const mh = img.naturalHeight || img.height || 512;
+      const tmp = document.createElement('canvas');
+      tmp.width = mw;
+      tmp.height = mh;
+      const tCtx = tmp.getContext('2d');
+      tCtx.drawImage(img, 0, 0, mw, mh);
+      const srcData = tCtx.getImageData(0, 0, mw, mh).data;
+
+      const out = document.createElement('canvas');
+      out.width = mw;
+      out.height = mh;
+      const oCtx = out.getContext('2d');
+      const outImg = oCtx.createImageData(mw, mh);
+      const oPx = outImg.data;
+
+      const isHairAt = (x, y) => {
+        const cx = Math.max(0, Math.min(mw - 1, x));
+        const cy = Math.max(0, Math.min(mh - 1, y));
+        const i = (cy * mw + cx) * 4;
+        return srcData[i + 2] >= 90 && srcData[i] < 140;
+      };
+
+      for (let y = 0; y < mh; y++) {
+        for (let x = 0; x < mw; x++) {
+          const i = (y * mw + x) * 4;
+          const hv = srcData[i + 2];
+          const sv = srcData[i];
+          if (hv < 72 || sv > 140) continue;
+          const isEdge =
+            !isHairAt(x - 2, y) ||
+            !isHairAt(x + 2, y) ||
+            !isHairAt(x, y - 2) ||
+            !isHairAt(x, y + 2);
+          if (isEdge && hv >= 90) {
+            oPx[i] = 192;
+            oPx[i + 1] = 132;
+            oPx[i + 2] = 252;
+            oPx[i + 3] = 215;
+          } else {
+            oPx[i] = 168;
+            oPx[i + 1] = 85;
+            oPx[i + 2] = 247;
+            oPx[i + 3] = Math.round(((hv - 72) / 183) * 78);
+          }
+        }
+      }
+      oCtx.putImageData(outImg, 0, 0);
+      photo._hairGuideCanvas = out;
+      photo._hairGuideMaskRef = srcRef;
+      photo._hairGuideLoading = false;
+      onReady?.();
+    })
+    .catch(() => {
+      photo._hairGuideLoading = false;
+    });
+  return null;
+}
+
 function drawOverlayGuides(w, h, photo) {
   const params = photo.params;
   const ctx = overlayCanvas.getContext('2d');
@@ -1597,6 +1987,53 @@ function drawOverlayGuides(w, h, photo) {
 
   if (state.showFaceGuides && params.face) {
     const f = params.face;
+
+    // 0. AI Hair Segmentation region & contour overlay
+    const hairOverlay = ensureHairGuideOverlayCanvas(photo, () => {
+      if (state.showFaceGuides && photo === getActivePhoto()) {
+        drawOverlayGuides(w, h, photo);
+      }
+    });
+    if (hairOverlay) {
+      const mw = hairOverlay.width;
+      const mh = hairOverlay.height;
+      const sx = croppedView ? params.cropX * mw : 0;
+      const sy = croppedView ? params.cropY * mh : 0;
+      const sw = croppedView ? Math.max(1, params.cropW * mw) : mw;
+      const sh = croppedView ? Math.max(1, params.cropH * mh) : mh;
+      ctx.drawImage(hairOverlay, sx, sy, sw, sh, 0, 0, w, h);
+    }
+
+    if (photo.hairBounds?.detected) {
+      const hb = photo.hairBounds;
+      const hairHandles = [
+        { x: hb.crownX, y: hb.crownY, label: 'Đỉnh tóc', color: '#c084fc', align: 'right' },
+        { x: hb.hairlineX, y: hb.hairlineY, label: 'Chân tóc', color: '#a855f7', align: 'right' },
+        { x: hb.leftX, y: hb.leftY, label: 'Tóc T', color: '#c084fc', align: 'left' },
+        { x: hb.rightX, y: hb.rightY, label: 'Tóc P', color: '#c084fc', align: 'right' },
+      ];
+      for (const hh of hairHandles) {
+        const mp = mapPt(hh.x, hh.y);
+        const px = mp.x * w;
+        const py = mp.y * h;
+        ctx.fillStyle = hh.color;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.arc(px, py, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.font = '600 9.5px sans-serif';
+        const tw = Math.ceil(ctx.measureText(hh.label).width);
+        const boxW = tw + 8;
+        const bx = hh.align === 'left' ? Math.max(4, px - boxW - 8) : px + 8;
+        ctx.fillStyle = 'rgba(18, 12, 28, 0.88)';
+        ctx.fillRect(bx, py - 8, boxW, 15);
+        ctx.fillStyle = '#e9d5ff';
+        ctx.fillText(hh.label, bx + 4, py + 3);
+      }
+    }
 
     if (photo.mesh478 && photo.mesh478.length > 0) {
       const pts = photo.mesh478;
@@ -1630,11 +2067,11 @@ function drawOverlayGuides(w, h, photo) {
     }
 
     const handles = [
-      { key: 'leftEye', x: f.leftEyeX, y: f.leftEyeY, label: 'Mắt T', color: '#38bdf8' },
-      { key: 'rightEye', x: f.rightEyeX, y: f.rightEyeY, label: 'Mắt P', color: '#38bdf8' },
-      { key: 'nose', x: f.noseX, y: f.noseY, label: 'Mũi', color: '#f8d442' },
-      { key: 'mouth', x: f.mouthX, y: f.mouthY, label: 'Miệng', color: '#ec4899' },
-      { key: 'center', x: f.centerX, y: f.centerY, label: 'Mặt', color: '#22c55e' },
+      { key: 'leftEye', x: f.leftEyeX, y: f.leftEyeY, label: 'Mắt T', color: '#38bdf8', align: 'right' },
+      { key: 'rightEye', x: f.rightEyeX, y: f.rightEyeY, label: 'Mắt P', color: '#38bdf8', align: 'right' },
+      { key: 'nose', x: f.noseX, y: f.noseY, label: 'Mũi', color: '#f8d442', align: 'left' },
+      { key: 'mouth', x: f.mouthX, y: f.mouthY, label: 'Miệng', color: '#ec4899', align: 'right' },
+      { key: 'center', x: f.centerX, y: f.centerY, label: 'Mặt', color: '#22c55e', align: 'right' },
     ];
 
     for (const p of handles) {
@@ -1649,11 +2086,14 @@ function drawOverlayGuides(w, h, photo) {
       ctx.fill();
       ctx.stroke();
 
-      ctx.fillStyle = 'rgba(12, 13, 16, 0.88)';
-      ctx.fillRect(px + 9, py - 8, 44, 16);
-      ctx.fillStyle = '#fff';
       ctx.font = '600 10px sans-serif';
-      ctx.fillText(p.label, px + 13, py + 3);
+      const tw = Math.ceil(ctx.measureText(p.label).width);
+      const boxW = Math.max(36, tw + 10);
+      const bx = p.align === 'left' ? Math.max(4, px - boxW - 9) : px + 9;
+      ctx.fillStyle = 'rgba(12, 13, 16, 0.88)';
+      ctx.fillRect(bx, py - 8, boxW, 16);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(p.label, bx + 5, py + 3);
     }
   }
 
@@ -1963,6 +2403,15 @@ function needsHighresMatte(params) {
     (p.bgReplaceMode && p.bgReplaceMode !== 'original') ||
     (p.bgBlurBokeh || 0) > 0.5 ||
     (p.strayHair || 0) > 0.5 ||
+    Math.abs(p.hairVolume || 0) > 0.3 ||
+    Math.abs(p.hairSideLeftVolume || 0) > 0.3 ||
+    Math.abs(p.hairSideRightVolume || 0) > 0.3 ||
+    Math.abs(p.hairlineAdjust || 0) > 0.3 ||
+    (p.hairPartLine || 0) > 0.5 ||
+    (p.hairSmooth || 0) > 0.5 ||
+    (p.whiteHairBlacken || 0) > 0.5 ||
+    Math.abs(p.hairColorUnify || 0) > 0.5 ||
+    ((p.hairDyeStrength || 0) > 0.5 && p.hairDyeColor && p.hairDyeColor !== 'none') ||
     (p.backdropClean || 0) > 0.5 ||
     (p.backdropBandingFix || 0) > 0.5 ||
     Boolean(p.bgCleanDistractions) ||
@@ -2475,6 +2924,9 @@ async function rotateActivePhoto90(clockwise) {
     photo.mesh478 = aiResult.mesh478;
     photo.maskBase64 = aiResult.maskBase64;
     photo.sceneMaskBase64 = aiResult.sceneMaskBase64;
+    photo.hairBounds = aiResult.hairBounds || null;
+    photo._hairGuideCanvas = null;
+    photo._hairGuideMaskRef = null;
     photo.highresMatteBase64 = null;
     photo.highresMattePromise = null;
     photo._matteSourceRef = null;
@@ -2521,7 +2973,6 @@ function syncSlidersFromParams() {
     'bgBlendMode',
     'bgShadowBlendMode',
     'makeupLipTint',
-    'hairDyeColor',
   ]) {
     const el = document.getElementById(selId);
     if (el && selId in p) el.value = p[selId];
@@ -2529,10 +2980,27 @@ function syncSlidersFromParams() {
 
   updateBgCustomControlsUI(p);
   updateClothingControlsUI(p);
+  updateHairControlsUI(p);
   updateCropControlsUI(photo);
   updateHistoryButtonsUI(photo);
 
   renderToneCurveCanvas();
+}
+
+function updateHairControlsUI(params) {
+  const dyeColor = params?.hairDyeColor || 'none';
+  document.querySelectorAll('.hair-color-card').forEach((card) => {
+    card.classList.toggle('active', (card.dataset.haircolor || 'none') === dyeColor);
+  });
+  const dyeControls = document.getElementById('hair-dye-controls');
+  if (dyeControls) {
+    dyeControls.classList.toggle('disabled', dyeColor === 'none');
+  }
+  const sideLinkBtn = document.getElementById('btn-hair-side-link');
+  if (sideLinkBtn) {
+    sideLinkBtn.classList.toggle('active', Boolean(state.hairSideLinked));
+    sideLinkBtn.setAttribute('aria-pressed', String(Boolean(state.hairSideLinked)));
+  }
 }
 
 function updateClothingControlsUI(params) {
@@ -2744,6 +3212,11 @@ function renderUserPresetsList() {
     const btn = document.createElement('button');
     btn.className = 'retouch-preset-item user-preset-card';
     btn.type = 'button';
+    btn.title = `${preset.name} (Cài sẵn của tôi)`;
+
+    const thumb = document.createElement('span');
+    thumb.className = 'preset-thumb preset-thumb--user_custom';
+    thumb.setAttribute('aria-hidden', 'true');
 
     const badge = document.createElement('span');
     badge.className = 'preset-badge';
@@ -2771,6 +3244,7 @@ function renderUserPresetsList() {
       renderUserPresetsList();
     });
 
+    btn.appendChild(thumb);
     btn.appendChild(badge);
     btn.appendChild(meta);
     btn.appendChild(del);
@@ -2863,6 +3337,7 @@ async function importPathsFromRust(paths) {
         mesh478: aiResult.mesh478,
         maskBase64: aiResult.maskBase64,
         sceneMaskBase64: aiResult.sceneMaskBase64,
+        hairBounds: aiResult.hairBounds || null,
         landmarksDetected: aiResult.landmarksDetected,
         params,
       });
@@ -2923,6 +3398,7 @@ async function importHtmlFileList(fileList) {
         mesh478: aiResult.mesh478,
         maskBase64: aiResult.maskBase64,
         sceneMaskBase64: aiResult.sceneMaskBase64,
+        hairBounds: aiResult.hairBounds || null,
         landmarksDetected: aiResult.landmarksDetected,
         params,
       });
@@ -3075,8 +3551,17 @@ function setupRetouchEvents() {
 
   // Thanh icon & bảng nổi bên trái (có thể thu gọn / mở rộng)
   const leftHeading = document.getElementById('left-panel-heading');
+  const savePresetHeaderBtn = document.getElementById('btn-save-user-preset');
+  const clearHistoryHeaderBtn = document.getElementById('btn-clear-history');
+
+  const syncLeftHeaderActions = (tabId) => {
+    savePresetHeaderBtn?.classList.toggle('hidden', tabId !== 'ltab-presets');
+    clearHistoryHeaderBtn?.classList.toggle('hidden', tabId !== 'ltab-history');
+  };
+
   document.querySelectorAll('.left-rail-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
+      const targetTab = btn.dataset.ltab;
       const isAlreadyOpen =
         btn.classList.contains('active') && !retouchBody?.classList.contains('left-collapsed');
       if (isAlreadyOpen) {
@@ -3088,15 +3573,40 @@ function setupRetouchEvents() {
       document.querySelectorAll('.left-rail-btn').forEach((t) => t.classList.remove('active'));
       document.querySelectorAll('.left-tab-content').forEach((c) => c.classList.remove('active'));
       btn.classList.add('active');
-      document.getElementById(btn.dataset.ltab)?.classList.add('active');
+      document.getElementById(targetTab)?.classList.add('active');
       if (leftHeading) {
         const headingMap = {
           'ltab-presets': 'Cài sẵn',
+          'ltab-history': 'Lịch sử',
           'ltab-project': 'Dự án & AI',
           'ltab-info': 'Thông tin & Hướng dẫn',
         };
-        leftHeading.textContent = headingMap[btn.dataset.ltab] || 'Dự án & AI';
+        leftHeading.textContent = headingMap[targetTab] || 'Dự án & AI';
       }
+      syncLeftHeaderActions(targetTab);
+      if (targetTab === 'ltab-history') {
+        renderHistoryPanel(getActivePhoto());
+      }
+    });
+  });
+
+  clearHistoryHeaderBtn?.addEventListener('click', () => {
+    const photo = getActivePhoto();
+    if (!photo) return;
+    initPhotoHistory(photo);
+    if (renderTimeLabel) {
+      renderTimeLabel.textContent = 'Đã xóa lịch sử chỉnh sửa (giữ trạng thái hiện tại) ✓';
+    }
+  });
+
+  document.querySelectorAll('#ltab-presets .preset-cat-header').forEach((header) => {
+    header.addEventListener('click', () => {
+      const cat = header.closest('.preset-category');
+      if (!cat) return;
+      const collapsed = cat.classList.toggle('collapsed');
+      const labelSpan = header.querySelector('span') || header;
+      const raw = labelSpan.textContent.replace(/^[▾▸]\s*/, '');
+      labelSpan.textContent = `${collapsed ? '▸' : '▾'} ${raw}`;
     });
   });
 
@@ -3348,6 +3858,24 @@ function setupRetouchEvents() {
           );
         }
       }
+      if (
+        state.hairSideLinked &&
+        (key === 'hairSideLeftVolume' || key === 'hairSideRightVolume')
+      ) {
+        const pairedKey =
+          key === 'hairSideLeftVolume' ? 'hairSideRightVolume' : 'hairSideLeftVolume';
+        photo.params[pairedKey] = val;
+        const pairedEl = document.getElementById(pairedKey);
+        const pairedBadge = document.querySelector(`.val[data-for="${pairedKey}"]`);
+        if (pairedEl) pairedEl.value = String(val);
+        if (pairedBadge) {
+          pairedBadge.textContent = formatSliderBadgeValue(val, pairedKey);
+          pairedBadge.classList.toggle(
+            'modified',
+            Math.abs(val - Number(defaultsSnapshot[pairedKey])) > 1e-4
+          );
+        }
+      }
       if (key === 'rotateAngle') {
         constrainCropBoxInsideRotatedBounds(photo, val);
         updateCropControlsUI(photo);
@@ -3383,7 +3911,7 @@ function setupRetouchEvents() {
   });
 
   // Select Dropdowns
-  for (const selId of ['lutPreset', 'treatment', 'makeupLipTint', 'hairDyeColor', ...BG_SELECT_IDS]) {
+  for (const selId of ['lutPreset', 'treatment', 'makeupLipTint', ...BG_SELECT_IDS]) {
     document.getElementById(selId)?.addEventListener('change', (e) => {
       const photo = getActivePhoto();
       if (!photo) return;
@@ -3552,6 +4080,8 @@ function setupRetouchEvents() {
 
   // LiYing AI: Tách & Thay nền chuẩn ảnh thẻ / Chân dung (Offline)
   let selectedLiyingColor = 'blue';
+  let liyingRunSeq = 0;
+  let liyingInFlight = false;
 
   document.querySelectorAll('.liying-color-chip').forEach((chip) => {
     chip.addEventListener('click', () => {
@@ -3570,9 +4100,31 @@ function setupRetouchEvents() {
       return;
     }
 
+    const reqSeq = ++liyingRunSeq;
+    liyingInFlight = true;
+
     const straighten = levelOnly ? true : Boolean(document.getElementById('liying-straighten-cb')?.checked);
     const color = selectedLiyingColor || 'blue';
     const transparent = color === 'transparent';
+
+    // Capture pre-LiYing source state once so "Hủy" can cleanly revert both background & shoulder-level changes
+    if (!photo._liyingBackup) {
+      photo._liyingBackup = {
+        originalDataUrl: photo.originalDataUrl,
+        processedDataUrl: photo.processedDataUrl,
+        width: photo.width,
+        height: photo.height,
+        face: photo.params?.face ? JSON.parse(JSON.stringify(photo.params.face)) : null,
+        mesh478: photo.mesh478 || null,
+        maskBase64: photo.maskBase64 || null,
+        sceneMaskBase64: photo.sceneMaskBase64 || null,
+        highresMatteBase64: photo.highresMatteBase64 || null,
+        _matteSourceRef: photo._matteSourceRef || null,
+        landmarksDetected: Boolean(photo.landmarksDetected),
+        bgReplaceMode: photo.params?.bgReplaceMode || 'original',
+        bgCustomColor: photo.params?.bgCustomColor || '#628bce',
+      };
+    }
 
     renderTimeLabel.textContent = levelOnly
       ? 'Đang cân bằng vai & bố cục LiYing AI...'
@@ -3587,6 +4139,10 @@ function setupRetouchEvents() {
         levelOnly,
       });
 
+      if (reqSeq !== liyingRunSeq) {
+        return;
+      }
+
       if (res && res.data_url) {
         if (levelOnly || straighten) {
           photo.originalDataUrl = res.data_url;
@@ -3598,10 +4154,14 @@ function setupRetouchEvents() {
           try {
             const imgEl = await loadImageElement(photo.originalDataUrl);
             const aiResult = await analyzePhotoWithNeuralAI(imgEl, photo.params.face);
+            if (reqSeq !== liyingRunSeq) return;
             photo.params.face = aiResult.face;
             photo.mesh478 = aiResult.mesh478;
             photo.maskBase64 = aiResult.maskBase64;
             photo.sceneMaskBase64 = aiResult.sceneMaskBase64;
+            photo.hairBounds = aiResult.hairBounds || null;
+            photo._hairGuideCanvas = null;
+            photo._hairGuideMaskRef = null;
             photo.landmarksDetected = aiResult.landmarksDetected;
           } catch (_) {}
         } else {
@@ -3649,10 +4209,72 @@ function setupRetouchEvents() {
         if (state.workspaceMode === 'grid') renderLibraryGrid();
       }
     } catch (err) {
+      if (reqSeq !== liyingRunSeq) return;
       console.error('Lỗi chạy LiYing AI:', err);
       alert('Lỗi xử lý LiYing AI: ' + (err?.message || err));
       renderTimeLabel.textContent = 'Lỗi LiYing AI';
+    } finally {
+      if (reqSeq === liyingRunSeq) {
+        liyingInFlight = false;
+      }
     }
+  }
+
+  async function cancelLiyingBackgroundReplacement() {
+    const wasRunning = liyingInFlight;
+    liyingRunSeq++;
+    liyingInFlight = false;
+
+    const photo = getActivePhoto();
+    if (!photo) return;
+
+    if (wasRunning) {
+      renderTimeLabel.textContent = 'Đã hủy xử lý LiYing AI';
+      return;
+    }
+
+    const backup = photo._liyingBackup;
+    const hadBgChange =
+      Boolean(backup) ||
+      Boolean(photo._isLiyingOutput) ||
+      (photo.params?.bgReplaceMode && photo.params.bgReplaceMode !== 'original');
+
+    if (!hadBgChange) {
+      renderTimeLabel.textContent = 'Ảnh đang ở trạng thái phông nền gốc';
+      return;
+    }
+
+    if (backup) {
+      photo.originalDataUrl = backup.originalDataUrl;
+      photo.processedDataUrl = backup.processedDataUrl;
+      photo.width = backup.width;
+      photo.height = backup.height;
+      if (backup.face) photo.params.face = JSON.parse(JSON.stringify(backup.face));
+      photo.mesh478 = backup.mesh478;
+      photo.maskBase64 = backup.maskBase64;
+      photo.sceneMaskBase64 = backup.sceneMaskBase64;
+      photo.highresMatteBase64 = backup.highresMatteBase64;
+      photo._matteSourceRef = backup._matteSourceRef;
+      photo.landmarksDetected = backup.landmarksDetected;
+      photo.params.bgCustomColor = backup.bgCustomColor;
+      photo._subjectBoundsCache = null;
+      photo._liyingBackup = null;
+    }
+
+    photo._isLiyingOutput = false;
+    photo.params.bgReplaceMode = 'original';
+    updateBgCustomControlsUI(photo.params);
+    commitHistory(photo);
+
+    if (isPhotoEdited(photo.params)) {
+      await processActivePhoto(false);
+    } else {
+      photo.processedDataUrl = photo.originalDataUrl;
+      await renderViewport();
+      renderFilmstrip();
+      if (state.workspaceMode === 'grid') renderLibraryGrid();
+    }
+    renderTimeLabel.textContent = 'Đã hủy thay nền LiYing AI';
   }
 
   document.getElementById('btn-liying-apply')?.addEventListener('click', () => {
@@ -3661,6 +4283,10 @@ function setupRetouchEvents() {
 
   document.getElementById('btn-liying-level-only')?.addEventListener('click', () => {
     executeLiyingBackgroundReplacement(true);
+  });
+
+  document.getElementById('btn-liying-cancel')?.addEventListener('click', () => {
+    cancelLiyingBackgroundReplacement();
   });
 
   // Evoto Module 3B: Làm đẹp trang phục
@@ -3718,6 +4344,62 @@ function setupRetouchEvents() {
   bindDrawerToggle('btn-cloth-sweat-expand', 'cloth-sweat-drawer');
   bindDrawerToggle('btn-cloth-edge-expand', 'cloth-edge-drawer');
   bindDrawerToggle('btn-cloth-ailab-moire', 'cloth-ailab-moire-drawer');
+  bindDrawerToggle('btn-hair-stray-expand', 'hair-stray-drawer');
+  bindDrawerToggle('btn-hair-smooth-expand', 'hair-smooth-drawer');
+
+  // Evoto Module: Điều chỉnh tóc
+  document.getElementById('btn-hair-side-link')?.addEventListener('click', () => {
+    state.hairSideLinked = !state.hairSideLinked;
+    const photo = getActivePhoto();
+    updateHairControlsUI(photo?.params || createDefaultParams());
+  });
+
+  document.querySelectorAll('.hair-color-card').forEach((card) => {
+    card.addEventListener('click', () => {
+      const photo = getActivePhoto();
+      if (!photo) return;
+      const colorId = card.dataset.haircolor || 'none';
+      const defaultDeg = Number(card.dataset.deg || 0);
+      photo.params.hairDyeColor = colorId;
+      photo.params.hairDyeStrength = colorId === 'none' ? 0 : defaultDeg;
+      if (colorId === 'none') {
+        photo.params.hairDyeDarken = 0;
+      }
+      syncSlidersFromParams();
+      commitHistory(photo);
+      processActivePhoto(false);
+    });
+  });
+
+  document.getElementById('btn-hair-reset')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const photo = getActivePhoto();
+    if (!photo) return;
+    const def = createDefaultParams();
+    for (const k of [
+      'strayHair',
+      'strayHairInner',
+      'strayHairOuter',
+      'hairVolume',
+      'hairSideLeftVolume',
+      'hairSideRightVolume',
+      'hairlineAdjust',
+      'hairPartLine',
+      'hairSmooth',
+      'hairFrizzy',
+      'hairShine',
+      'whiteHairBlacken',
+      'hairColorUnify',
+      'hairDyeStrength',
+      'hairDyeDarken',
+      'hairDyeColor',
+    ]) {
+      photo.params[k] = def[k];
+    }
+    syncSlidersFromParams();
+    commitHistory(photo);
+    processActivePhoto(false);
+  });
 
   document.getElementById('btn-cloth-try-moire')?.addEventListener('click', () => {
     const aiBtn = document.getElementById('btn-cloth-ailab-moire');
@@ -5060,6 +5742,7 @@ async function initRetouchStudio() {
         mesh478: aiResult.mesh478,
         maskBase64: aiResult.maskBase64,
         sceneMaskBase64: aiResult.sceneMaskBase64,
+        hairBounds: aiResult.hairBounds || null,
         landmarksDetected: aiResult.landmarksDetected,
         params,
       });
