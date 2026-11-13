@@ -1058,6 +1058,9 @@ fn build_semantic_grid(
     let has_neural_hair = mask_img
         .map(|m| m.pixels().any(|p| p[2] > 45))
         .unwrap_or(false);
+    let has_neural_features = mask_img
+        .map(|m| m.pixels().any(|p| p[1] > 20))
+        .unwrap_or(false);
     let has_neural_scene = scene_mask_img.is_some() || legacy_has_scene;
     let scene_is_single_matte = scene_mask_img
         .map(|s_img| {
@@ -1175,15 +1178,69 @@ fn build_semantic_grid(
                         } else {
                             r_skin.max(geo.skin * 0.35)
                         },
-                        forehead: if g_code.abs_diff(30) <= 6 { 1.0 } else { geo.forehead * 0.5 },
-                        under_eye: if g_code.abs_diff(60) <= 6 { 1.0 } else { geo.under_eye * 0.5 },
-                        nasolabial: if g_code.abs_diff(85) <= 6 { 1.0 } else { geo.nasolabial * 0.6 },
-                        eyebrow: if g_code.abs_diff(110) <= 6 { 1.0 } else { geo.eyebrow * 0.5 },
-                        eyeshadow: if g_code.abs_diff(125) <= 6 { 1.0 } else { geo.eyeshadow * 0.6 },
-                        cheek: if g_code.abs_diff(135) <= 6 { 1.0 } else { geo.cheek * 0.6 },
-                        eye: if g_code.abs_diff(160) <= 6 { 1.0 } else { geo.eye * 0.5 },
-                        lips_outer: if g_code.abs_diff(205) <= 6 { 1.0 } else { geo.lips_outer * 0.5 },
-                        teeth_inner: if g_code.abs_diff(245) <= 6 { 1.0 } else { geo.teeth_inner * 0.5 },
+                        forehead: if g_code.abs_diff(30) <= 6 {
+                            1.0
+                        } else if !has_neural_features {
+                            geo.forehead * 0.5
+                        } else {
+                            0.0
+                        },
+                        under_eye: if g_code.abs_diff(60) <= 6 {
+                            1.0
+                        } else if !has_neural_features {
+                            geo.under_eye * 0.5
+                        } else {
+                            0.0
+                        },
+                        nasolabial: if g_code.abs_diff(85) <= 6 {
+                            1.0
+                        } else if !has_neural_features {
+                            geo.nasolabial * 0.6
+                        } else {
+                            0.0
+                        },
+                        eyebrow: if g_code.abs_diff(110) <= 6 {
+                            1.0
+                        } else if !has_neural_features {
+                            geo.eyebrow * 0.5
+                        } else {
+                            0.0
+                        },
+                        eyeshadow: if g_code.abs_diff(125) <= 6 {
+                            1.0
+                        } else if !has_neural_features {
+                            geo.eyeshadow * 0.6
+                        } else {
+                            0.0
+                        },
+                        cheek: if g_code.abs_diff(135) <= 6 {
+                            1.0
+                        } else if !has_neural_features {
+                            geo.cheek * 0.6
+                        } else {
+                            0.0
+                        },
+                        eye: if g_code.abs_diff(160) <= 6 {
+                            1.0
+                        } else if !has_neural_features {
+                            geo.eye * 0.5
+                        } else {
+                            0.0
+                        },
+                        lips_outer: if g_code.abs_diff(205) <= 6 {
+                            1.0
+                        } else if !has_neural_features {
+                            geo.lips_outer * 0.5
+                        } else {
+                            0.0
+                        },
+                        teeth_inner: if g_code.abs_diff(245) <= 6 {
+                            1.0
+                        } else if !has_neural_features {
+                            geo.teeth_inner * 0.5
+                        } else {
+                            0.0
+                        },
                         hair: hair_val,
                         clothing: cloth_prob,
                         background: (1.0 - fg_prob).clamp(0.0, 1.0),
